@@ -15,7 +15,7 @@ public class Performance extends CreativePlusFeature {
     private boolean disablePortalGuiClosing = false;
 
     public Performance() {
-        super("性能优化", "提供多种性能优化选项");
+        super("performance", "提供多种性能优化选项");
     }
 
     public void openSettings(Screen parent) {

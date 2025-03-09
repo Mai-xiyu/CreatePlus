@@ -15,7 +15,7 @@ public class PingDisplay extends CreativePlusFeature {
     private float backgroundOpacity = 0.5f;   // 默认背景透明度
     
     public PingDisplay() {
-        super("延迟显示", "在玩家名字旁显示延迟");
+        super("ping_display", "在玩家名字旁显示延迟");
     }
 
     @Override

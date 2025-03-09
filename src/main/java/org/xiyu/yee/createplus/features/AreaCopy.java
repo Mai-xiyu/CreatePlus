@@ -26,7 +26,7 @@ public class AreaCopy extends CreativePlusFeature {
     private int tickCounter = 0;
 
     public AreaCopy() {
-        super("区域复制", "复制和粘贴选定区域的建筑");
+        super("area_copy", "复制和粘贴选定区域的建筑");
     }
 
     @Override

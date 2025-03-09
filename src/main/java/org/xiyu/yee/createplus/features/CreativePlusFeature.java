@@ -9,15 +9,9 @@ public abstract class CreativePlusFeature {
     private final String descriptionKey;
     private boolean enabled = false;
 
-    public CreativePlusFeature(String name, String description) {
-        this.name = name;
-        String baseKey = "feature." + Createplus.MODID + "." + 
-            name.toLowerCase()
-                .replace(' ', '_')
-                .replace("(", "")
-                .replace(")", "")
-                .replace("[", "")
-                .replace("]", "");
+    public CreativePlusFeature(String baseName, String baseDesc) {
+        this.name = baseName.toLowerCase().replace(' ', '_');
+        String baseKey = "feature." + Createplus.MODID + "." + this.name;
         
         this.translationKey = baseKey + ".name";
         this.descriptionKey = baseKey + ".description";
@@ -53,7 +47,7 @@ public abstract class CreativePlusFeature {
     }
 
     public String getName() {
-        return name;
+        return Component.translatable(translationKey).getString();
     }
 
     public String getTranslationKey() {

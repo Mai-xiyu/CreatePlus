@@ -50,7 +50,7 @@ public class SpeedAdjust extends CreativePlusFeature implements SubHUDFeature {
     }
 
     public SpeedAdjust() {
-        super("速度调整", "调整各种移动速度");
+        super("speed_adjust", "speed_adjust");
         for (SpeedType type : SpeedType.values()) {
             speedMultipliers.put(type, type.defaultValue);
         }
@@ -300,7 +300,7 @@ public class SpeedAdjust extends CreativePlusFeature implements SubHUDFeature {
     }
 
     public float getSpinBotSpeed() {
-        return speedMultipliers.getOrDefault(SpeedType.SPINBOT, 1.0f);
+        return speedMultipliers.getOrDefault(SpeedType.SPINBOT, SpeedType.SPINBOT.defaultValue);
     }
 
     public float getSpeedValue(SpeedType type) {

@@ -17,7 +17,7 @@ public class Scaffold extends CreativePlusFeature {
     private int tickCounter = 0;
 
     public Scaffold() {
-        super("脚手架", "跳跃时自动在脚下放置方块");
+        super("scaffold", "跳跃时自动在脚下放置方块");
     }
 
     @Override

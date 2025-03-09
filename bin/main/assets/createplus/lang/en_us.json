@@ -1,36 +1,79 @@
 {
   "feature.createplus.spinbot.name": "Spin Bot",
-  "feature.createplus.spinbot.description": "Rotate like a spinning top",
+  "feature.createplus.spinbot.description": "Rotate like a spinning top\n§7Adjust rotation speed in Speed Adjust",
   "message.createplus.spinbot.enabled": "Spin Bot enabled - Third person view recommended",
+  "feature.createplus.speedbuild.name": "Speed Build",
+  "feature.createplus.speedbuild.description": "Increase block placement speed in creative mode",
+  "feature.createplus.areacopy.name": "Area Copy",
+  "feature.createplus.areacopy.description": "Copy and paste selected area buildings",
+  "feature.createplus.infiniteplacement.name": "Infinite Placement",
+  "feature.createplus.infiniteplacement.description": "Infinite item placement in creative mode",
+  "feature.createplus.mirrorbuild.name": "Mirror Build",
+  "feature.createplus.mirrorbuild.description": "Place blocks at symmetrical positions",
+  
   "key.createplus.toggle_hud": "Toggle Feature Menu",
   "key.categories.createplus": "Create Plus",
+  
   "itemGroup.createplus.player_items": "Create Plus - Player Items",
   "itemGroup.createplus.spawn_eggs": "Create Plus - Spawn Eggs",
+  "itemGroup.createplus.hidden_items": "Hidden Items",
+  
   "createplus.title": "CreatePlus Features",
   "createplus.hud.opacity": "HUD Opacity: %s%%",
   
   "feature.createplus.improved_flight.name": "Improved Flight",
-  "feature.createplus.infinite_placement.name": "Infinite Placement",
-  "feature.createplus.speed_build.name": "Speed Build",
-  "feature.createplus.area_copy.name": "Area Copy",
-  "feature.createplus.mirror_build.name": "Mirror Build",
-  "feature.createplus.spinbot.name": "SpinBot",
+  "feature.createplus.improved_flight.description": "Better flight controls and speed",
+  
+  "feature.createplus.gibbon.name": "Gibbon",
+  "feature.createplus.gibbon.description": "Increase interaction distance with special equipment",
+  
   "feature.createplus.nucker.name": "Nucker",
+  "feature.createplus.nucker.description": "Break blocks in area",
+  
   "feature.createplus.area_place.name": "Area Place",
+  "feature.createplus.area_place.description": "Place blocks in area",
+  
   "feature.createplus.block_color_swap.name": "Block Color Swap",
+  "feature.createplus.block_color_swap.description": "Quick color switching for blocks",
+  
   "feature.createplus.building_export.name": "Building Export",
+  "feature.createplus.building_export.description": "Export and import buildings",
+  
   "feature.createplus.scaffold.name": "Scaffold",
+  "feature.createplus.scaffold.description": "Auto bridge building",
+  
   "feature.createplus.gamma_override.name": "Night Vision",
+  "feature.createplus.gamma_override.description": "Better night vision effect",
+  
   "feature.createplus.ping_display.name": "Ping Display",
+  "feature.createplus.ping_display.description": "Show network latency",
+  
   "feature.createplus.speed_adjust.name": "Speed Adjust",
+  "feature.createplus.speed_adjust.description": "Adjust various movement speeds\n§7Current: §e%s\n§7Use arrow keys to adjust",
+  
   "feature.createplus.freecam.name": "Freecam",
+  "feature.createplus.freecam.description": "Detach camera from player",
+  
   "feature.createplus.zoom.name": "Zoom",
+  "feature.createplus.zoom.description": "Camera zoom functionality",
+  
   "feature.createplus.performance.name": "Performance",
+  "feature.createplus.performance.description": "Various performance optimizations",
+  
   "feature.createplus.time_weather.name": "Time Weather",
+  "feature.createplus.time_weather.description": "Control time and weather locally",
+  
   "feature.createplus.mini_hud.name": "Mini HUD",
-
+  "feature.createplus.mini_hud.description": "Display game info in top-left corner\n§7FPS\n§7Game Time\n§7Position\n§7Biome",
+  
   "createplus.status.enabled": "§a[ON]",
   "createplus.status.disabled": "§c[OFF]",
   
-  "createplus.modules.title": "Modules"
+  "createplus.modules.title": "Modules",
+
+  "minihud.fps": "FPS",
+  "minihud.time": "Game Time",
+  "minihud.pos": "Position",
+  "minihud.biome": "Biome",
+  "minihud.localtime": "Local Time"
 } 

@@ -18,7 +18,7 @@ public class BuildingExport extends CreativePlusFeature {
     private Map<BlockPos, BlockState> selectedBlocks = new HashMap<>();
 
     public BuildingExport() {
-        super("建筑导出", "使用木铲选择区域并导出建筑");
+        super("building_export", "使用木铲选择区域并导出建筑");
     }
 
     @Override

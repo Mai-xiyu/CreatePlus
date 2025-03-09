@@ -16,7 +16,7 @@ public class TimeWeatherControl extends CreativePlusFeature {
     private static final List<String> TIME_PRESETS = Arrays.asList("日出", "中午", "日落", "前夜", "午夜");
     
     public TimeWeatherControl() {
-        super("时间天气", "控制本地时间和天气");
+        super("time_weather", "控制本地时间和天气");
         MinecraftForge.EVENT_BUS.register(this);
     }
 

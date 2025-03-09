@@ -200,7 +200,7 @@ public class BlockColorSwap extends CreativePlusFeature {
     }
 
     public BlockColorSwap() {
-        super("方块变色", "按住左CTRL并滚动鼠标滚轮切换同类方块颜色");
+        super("block_color_swap", "按住左CTRL并滚动鼠标滚轮切换同类方块颜色");
         MinecraftForge.EVENT_BUS.register(this);
     }
 

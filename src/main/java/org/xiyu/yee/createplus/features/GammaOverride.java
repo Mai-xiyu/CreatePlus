@@ -16,7 +16,7 @@ public class GammaOverride extends CreativePlusFeature {
     private double nightVisionGamma = 240.0D;
 
     public GammaOverride() {
-        super("夜视", "提供更好的夜视效果");
+        super("gamma_override", "提供更好的夜视效果");
         initGammaOption();
         // 创建一个持续时间很长且无粒子效果的夜视效果
         nightVisionEffect = new MobEffectInstance(

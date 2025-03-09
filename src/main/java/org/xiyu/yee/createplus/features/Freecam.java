@@ -32,7 +32,7 @@ public class Freecam extends CreativePlusFeature {
     private static final float SPEED_STEP = 0.1f;
 
     public Freecam() {
-        super("灵魂出窍", "允许玩家灵魂出窍自由观察");
+        super("freecam", "freecam");
         MinecraftForge.EVENT_BUS.register(this);
     }
 

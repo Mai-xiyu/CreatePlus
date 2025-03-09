@@ -15,7 +15,7 @@ public class MirrorBuild extends CreativePlusFeature {
     private Direction.Axis mirrorAxis = Direction.Axis.X; // 默认X轴镜像
 
     public MirrorBuild() {
-        super("镜像建造", "同时在对称位置放置方块");
+        super("mirror_build", "同时在对称位置放置方块");
     }
 
     @Override

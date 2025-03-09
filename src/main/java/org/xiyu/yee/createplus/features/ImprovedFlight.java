@@ -8,7 +8,7 @@ public class ImprovedFlight extends CreativePlusFeature {
     private float originalFlySpeed;
 
     public ImprovedFlight() {
-        super("改进飞行", "提供更快的飞行速度和更精确的控制");
+        super("improved_flight", "提供更快的飞行速度和更精确的控制");
     }
 
     @Override

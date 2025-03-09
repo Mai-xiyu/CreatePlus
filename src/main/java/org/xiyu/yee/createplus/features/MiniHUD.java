@@ -23,7 +23,7 @@ public class MiniHUD extends CreativePlusFeature {
     private final Map<String, Integer> valueColors = new HashMap<>();
     
     public MiniHUD() {
-        super("迷你HUD", "在左上角显示游戏信息");
+        super("mini_hud", "mini_hud");
         MinecraftForge.EVENT_BUS.register(this);
         initDefaultColors();
     }

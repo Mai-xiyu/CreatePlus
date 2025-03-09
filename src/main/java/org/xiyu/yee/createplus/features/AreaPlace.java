@@ -19,7 +19,7 @@ public class AreaPlace extends CreativePlusFeature {
     private BlockPos lastPos = null;
 
     public AreaPlace() {
-        super("范围放置", "使用副手物品进行范围放置");
+        super("area_place", "使用副手物品进行范围放置");
     }
 
     @Override

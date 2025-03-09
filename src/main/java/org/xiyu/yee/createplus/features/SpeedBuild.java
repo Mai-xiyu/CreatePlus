@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 
 public class SpeedBuild extends CreativePlusFeature {
     public SpeedBuild() {
-        super("快速建造", "移除放置冷却");
+        super("speed_build", "移除放置冷却");
     }
 
     @Override

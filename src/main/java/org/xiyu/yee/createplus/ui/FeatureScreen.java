@@ -60,7 +60,7 @@ public class FeatureScreen {
 
         // 渲染标题
         graphics.drawString(mc.font, 
-            Component.translatable("createplus.title"), 
+            Component.translatable("createplus.title"),
             panelX + 5, panelY + 5, 0xFFFFFFFF);
 
         // 设置裁剪区域
@@ -81,8 +81,6 @@ public class FeatureScreen {
                     int selectedColor = (selectedAlpha << 24) | (SELECTED_COLOR & 0xFFFFFF);
                     renderRoundedRect(graphics, panelX, y, panelX + panelWidth, y + itemHeight, selectedColor);
                 }
-
-                // 使用 Component 直接渲染
                 Component text = Component.translatable(feature.getTranslationKey())
                     .append(" ")
                     .append(Component.translatable(feature.isEnabled() ? 

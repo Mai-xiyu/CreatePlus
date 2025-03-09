@@ -16,7 +16,7 @@ public class Gibbon extends CreativePlusFeature {
     private static final ItemStack GIBBON_LEGGINGS = createGibbonLeggings();
 
     public Gibbon() {
-        super("长臂猿", "通过特殊装备增加交互距离");
+        super("gibbon", "通过特殊装备增加交互距离");
     }
 
     private static ItemStack createGibbonLeggings() {

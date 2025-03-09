@@ -14,7 +14,7 @@ public class Zoom extends CreativePlusFeature {
     private float currentZoom = 1.0f;
 
     public Zoom() {
-        super("视角缩放", "允许玩家缩放视角");
+        super("zoom", "允许玩家缩放视角");
     }
 
     @Override

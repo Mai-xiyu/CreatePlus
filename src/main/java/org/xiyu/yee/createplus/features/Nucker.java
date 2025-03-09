@@ -17,7 +17,7 @@ public class Nucker extends CreativePlusFeature {
     private int tickCounter = 0;
 
     public Nucker() {
-        super("范围破坏", "快速破坏范围内的方块");
+        super("nucker", "快速破坏范围内的方块");
     }
 
     @Override

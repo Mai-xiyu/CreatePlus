@@ -1,68 +1,68 @@
 {
-  "改进飞行": {
+  "Improved Flight": {
     "enabled": false
   },
-  "无限放置": {
+  "Infinite Placement": {
     "enabled": false
   },
-  "快速建造": {
+  "Speed Build": {
     "enabled": false
   },
-  "区域复制": {
+  "Area Copy": {
     "enabled": false
   },
-  "镜像建造": {
+  "Mirror Build": {
     "enabled": false
   },
-  "feature.createplus.spinbot.name": {
+  "Spin Bot": {
     "enabled": false
   },
-  "范围破坏": {
+  "Nucker": {
     "enabled": false
   },
-  "范围放置": {
+  "Area Place": {
     "enabled": false
   },
-  "方块变色": {
+  "Block Color Swap": {
     "enabled": false
   },
-  "建筑导出": {
+  "Building Export": {
     "enabled": false
   },
-  "脚手架": {
+  "Scaffold": {
     "enabled": false
   },
-  "夜视": {
+  "Night Vision": {
     "enabled": false,
     "originalGamma": 0.0,
     "nightVisionGamma": 240.0
   },
-  "延迟显示": {
+  "Ping Display": {
     "enabled": false,
     "backgroundColor": -2147483648,
     "backgroundOpacity": 0.5
   },
-  "长臂猿": {
+  "Gibbon": {
     "enabled": false
   },
-  "速度调整": {
-    "enabled": true,
+  "Speed Adjust": {
+    "enabled": false,
     "speeds": {
-      "WALK": 1.9999999,
-      "FLY": 2.0,
-      "RIDE": 2.0,
-      "SWIM": 2.0,
-      "ELYTRA": 2.0,
-      "SPINBOT": 2.0
+      "WALK": 1.0,
+      "FLY": 1.0,
+      "RIDE": 1.0,
+      "SWIM": 1.0,
+      "ELYTRA": 1.0,
+      "SPINBOT": 1.0
     }
   },
-  "灵魂出窍": {
+  "Freecam": {
     "enabled": false
   },
-  "视角缩放": {
-    "enabled": false
+  "Zoom": {
+    "enabled": true
   },
-  "性能优化": {
+  "Performance": {
     "enabled": false,
     "disableParticles": false,
     "disableBlockBreakingParticles": false,
@@ -71,10 +71,10 @@
     "disableFallingBlockEntityRendering": false,
     "disablePortalGuiClosing": false
   },
-  "时间天气": {
+  "Time Weather": {
     "enabled": false
   },
-  "迷你HUD": {
+  "Mini HUD": {
     "enabled": false,
     "textColors": {
       "fps": 16777215,
