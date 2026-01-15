@@ -1,0 +1,94 @@
+{
+  "Improved Flight": {
+    "enabled": false
+  },
+  "Infinite Placement": {
+    "enabled": false
+  },
+  "Speed Build": {
+    "enabled": false
+  },
+  "Area Copy": {
+    "enabled": false
+  },
+  "Mirror Build": {
+    "enabled": false
+  },
+  "Spin Bot": {
+    "enabled": false
+  },
+  "Nucker": {
+    "enabled": false
+  },
+  "Area Place": {
+    "enabled": false
+  },
+  "Block Color Swap": {
+    "enabled": false
+  },
+  "Building Export": {
+    "enabled": false
+  },
+  "Scaffold": {
+    "enabled": true
+  },
+  "Night Vision": {
+    "enabled": false,
+    "originalGamma": 0.0,
+    "nightVisionGamma": 240.0
+  },
+  "Ping Display": {
+    "enabled": false,
+    "backgroundColor": -2147483648,
+    "backgroundOpacity": 0.5
+  },
+  "Gibbon": {
+    "enabled": true
+  },
+  "Speed Adjust": {
+    "enabled": true,
+    "speeds": {
+      "WALK": 2.0,
+      "FLY": 2.0,
+      "RIDE": 2.0,
+      "SWIM": 2.0,
+      "ELYTRA": 2.0,
+      "SPINBOT": 2.0
+    }
+  },
+  "Freecam": {
+    "enabled": false
+  },
+  "Zoom": {
+    "enabled": false
+  },
+  "Performance": {
+    "enabled": false,
+    "disableParticles": false,
+    "disableBlockBreakingParticles": false,
+    "disableDeadMobRendering": false,
+    "disableEntityRendering": false,
+    "disableFallingBlockEntityRendering": false,
+    "disablePortalGuiClosing": false
+  },
+  "Time Weather": {
+    "enabled": false
+  },
+  "Mini HUD": {
+    "enabled": false,
+    "textColors": {
+      "fps": 16777215,
+      "time": 16777215,
+      "pos": 16777215,
+      "biome": 16777215,
+      "localtime": 16777215
+    },
+    "valueColors": {
+      "fps": 16777215,
+      "time": 16777215,
+      "pos": 16777215,
+      "biome": 16777215,
+      "localtime": 16777215
+    }
+  }
+}
