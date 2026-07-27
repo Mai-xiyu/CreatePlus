@@ -1,234 +1,148 @@
 package org.xiyu.yee.createplus.features;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.*;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.phys.Vec3;
-import org.xiyu.yee.createplus.utils.KeyBindings;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.world.level.GameType;
-import net.minecraftforge.client.event.RenderPlayerEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraft.world.phys.AABB;
-import java.awt.Color;
-
-import net.minecraft.resources.ResourceLocation;
-import org.xiyu.yee.createplus.mixin.CameraMixin;
-import org.xiyu.yee.createplus.mixin.CameraAccessor;
-import org.xiyu.yee.createplus.api.FreecamAPI;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.xiyu.yee.createplus.api.FreecamAPI;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.DoubleSetting;
+import org.xiyu.yee.createplus.utils.KeyBindings;
+import org.xiyu.yee.createplus.utils.RenderUtils;
 
-public class Freecam extends CreativePlusFeature {
-    private Vec3 originalPosition;
-    private float originalYRot;
-    private float originalXRot;
-    private GameType originalGameMode; // 记录原始游戏模式
-    private float flySpeed = 1.0f;
-    private static final float MIN_SPEED = 0.1f;
-    private static final float MAX_SPEED = 5.0f;
-    private static final float SPEED_STEP = 0.1f;
+/**
+ * 灵魂出窍：镜头脱离身体自由飞行，服务端看到的玩家位置保持不动。
+ *
+ * 做法是让本地玩家临时被当作旁观者（LocalPlayerMixin 让 isSpectator 返回 true，
+ * 于是原版每刻自动置上 noPhysics）并拦截移动数据包（ConnectionMixin），
+ * 退出时把玩家放回原位。全程不修改 gameMode，避免影响原版逻辑。
+ */
+public class Freecam extends CreativePlusFeature implements WorldRenderFeature {
+    private final DoubleSetting flySpeed = doubleSetting("fly_speed", 1.0D, 0.1D, 10.0D, 0.1D);
+    private final BooleanSetting showBody = boolSetting("show_body", true);
+    private final BooleanSetting scrollToAdjust = boolSetting("scroll_to_adjust", true);
+
+    private Vec3 anchorPosition;
+    private float anchorYRot;
+    private float anchorXRot;
+    private boolean previousMayFly;
+    private boolean previousFlying;
 
     public Freecam() {
-        super("freecam", "freecam");
-        MinecraftForge.EVENT_BUS.register(this);
+        super("freecam", "镜头脱离身体自由观察，按 F6 开关", Category.RENDER);
     }
 
     @Override
     public void onTick() {
-        if (!isEnabled()) return;
-        
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
+        if (mc.player == null) {
+            // 退出世界时清理状态，否则下次进游戏会带着一个坏掉的 freecam 标记
+            if (FreecamAPI.isFreecam()) FreecamAPI.reset();
+            return;
+        }
 
-        // 检查按键状态
-        if (KeyBindings.TOGGLE_FREECAM.consumeClick()) {
+        while (KeyBindings.TOGGLE_FREECAM.consumeClick()) {
             toggleFreecam();
         }
 
-        // 如果处于灵魂出窍状态，更新相机位置
         if (FreecamAPI.isFreecam()) {
-            updateCamera();
-        }
-
-        // 处理鼠标滚轮调节速度
-        while (mc.mouseHandler.getXVelocity() != 0) {
-            float delta = (float) (Math.signum(mc.mouseHandler.getXVelocity()) * SPEED_STEP);
-            flySpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, flySpeed + delta));
+            // 每刻都写一遍：服务端随时可能发能力数据包把这些值改回去
+            mc.player.getAbilities().setFlyingSpeed((float) (0.05D * flySpeed.value()));
+            mc.player.getAbilities().mayfly = true;
+            mc.player.getAbilities().flying = true;
         }
     }
 
-    private void toggleFreecam() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.gameMode == null) return;
+    @Override
+    public boolean handleScroll(double delta) {
+        if (!FreecamAPI.isFreecam() || !scrollToAdjust.get()) return false;
+        flySpeed.cycle(delta > 0 ? 1 : -1);
+        notifyActionBar(String.format("§b灵魂出窍速度: §f%.1fx", flySpeed.value()));
+        return true;
+    }
 
-        if (!FreecamAPI.isFreecam()) {
-            // 保存原始状态
-            originalPosition = mc.player.position();
-            originalYRot = mc.player.getYRot();
-            originalXRot = mc.player.getXRot();
-            originalGameMode = mc.gameMode.getPlayerMode(); // 保存原始游戏模式
-
-            // 启用灵魂出窍
-            FreecamAPI.setFreecamEnabled(true);
-            FreecamAPI.setFreecamPosition(originalPosition);
-            FreecamAPI.setFreecamRotation(originalYRot, originalXRot);
-            
-            // 切换到旁观者模式
-            mc.gameMode.setLocalMode(GameType.SPECTATOR);
-            
+    public void toggleFreecam() {
+        if (FreecamAPI.isFreecam()) {
+            stop();
         } else {
-            // 恢复原始状态
-            mc.player.setPos(originalPosition.x, originalPosition.y, originalPosition.z);
-            mc.player.setYRot(originalYRot);
-            mc.player.setXRot(originalXRot);
-            
-            // 禁用灵魂出窍
-            FreecamAPI.setFreecamEnabled(false);
-            
-            // 恢复原始游戏模式
-            mc.gameMode.setLocalMode(originalGameMode);
+            start();
         }
     }
 
-    private void updateCamera() {
+    private void start() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
-        
-        // 计算移动方向
-        float yaw = mc.player.getYRot();
-        float pitch = mc.player.getXRot();
-        float forward = 0;
-        float up = 0;
-        float strafe = 0;
+        LocalPlayer player = mc.player;
+        if (player == null) return;
 
-        if (mc.options.keyUp.isDown()) forward += 1;
-        if (mc.options.keyDown.isDown()) forward -= 1;
-        if (mc.options.keyLeft.isDown()) strafe -= 1;
-        if (mc.options.keyRight.isDown()) strafe += 1;
-        if (mc.options.keyJump.isDown()) up += 1;
-        if (mc.options.keyShift.isDown()) up -= 1;
+        anchorPosition = player.position();
+        anchorYRot = player.getYRot();
+        anchorXRot = player.getXRot();
+        previousMayFly = player.getAbilities().mayfly;
+        previousFlying = player.getAbilities().flying;
 
-        // 计算移动向量
-        double rad = Math.toRadians(yaw);
-        double dx = (strafe * Math.cos(rad) - forward * Math.sin(rad)) * flySpeed;
-        double dz = (forward * Math.cos(rad) + strafe * Math.sin(rad)) * flySpeed;
-        double dy = up * flySpeed;
+        FreecamAPI.setFreecamEnabled(true);
 
-        // 更新相机位置
-        Vec3 pos = FreecamAPI.getFreecamPos();
-        Vec3 newPos = new Vec3(pos.x + dx, pos.y + dy, pos.z + dz);
-        FreecamAPI.setFreecamPosition(newPos);
-        FreecamAPI.setFreecamRotation(yaw, pitch);
+        player.getAbilities().mayfly = true;
+        player.getAbilities().flying = true;
+        player.setDeltaMovement(Vec3.ZERO);
+
+        notifyActionBar("§b灵魂出窍已开启 §7(再按一次返回身体)");
     }
 
-    @SubscribeEvent
-    public void onRenderPlayer(RenderPlayerEvent.Pre event) {
-        if (!FreecamAPI.isFreecam() || !isEnabled()) return;
-        
-        // 如果渲染的是本地玩家，且处于灵魂出窍状态
-        if (event.getEntity() == Minecraft.getInstance().player) {
-            // 渲染玩家轮廓
-            renderPlayerOutline(event.getPoseStack(), event.getEntity());
+    private void stop() {
+        LocalPlayer player = Minecraft.getInstance().player;
+
+        // 先落下标记再挪玩家：isSpectator 还是 true 的话，
+        // 原版会把 noPhysics 保持开启，玩家可能停在方块里。
+        FreecamAPI.setFreecamEnabled(false);
+
+        if (player != null) {
+            if (anchorPosition != null) {
+                player.setPos(anchorPosition.x, anchorPosition.y, anchorPosition.z);
+                player.setYRot(anchorYRot);
+                player.setXRot(anchorXRot);
+            }
+            player.setDeltaMovement(Vec3.ZERO);
+            player.getAbilities().mayfly = previousMayFly;
+            player.getAbilities().flying = previousFlying;
+            player.getAbilities().setFlyingSpeed(0.05F);
         }
-    }
 
-    private void renderPlayerOutline(PoseStack poseStack, Entity entity) {
-        // 保存当前渲染状态
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        RenderSystem.disableDepthTest();
-        
-        // 获取玩家边界框
-        AABB box = entity.getBoundingBox();
-        float r = 0.0f;
-        float g = 1.0f;
-        float b = 1.0f;
-        float alpha = 0.4f;
-        
-        // 渲染半透明轮廓
-        renderBox(poseStack, box, r, g, b, alpha);
-        
-        // 恢复渲染状态
-        RenderSystem.enableDepthTest();
-        RenderSystem.disableBlend();
-    }
-
-    private void renderBox(PoseStack poseStack, AABB box, float r, float g, float b, float alpha) {
-        // 获取Tesselator和BufferBuilder
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder bufferBuilder = tesselator.getBuilder();
-        
-        // 开始绘制
-        bufferBuilder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
-        
-        // 绘制边界框的线条
-        // 底部矩形
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.minZ, r, g, b, alpha);
-        
-        // 顶部矩形
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.minZ, r, g, b, alpha);
-        
-        // 连接线
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.minZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.maxX, box.maxY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.minY, box.maxZ, r, g, b, alpha);
-        vertex(bufferBuilder, poseStack, box.minX, box.maxY, box.maxZ, r, g, b, alpha);
-        
-        // 结束绘制
-        tesselator.end();
-    }
-
-    private void vertex(BufferBuilder bufferBuilder, PoseStack poseStack, double x, double y, double z, float r, float g, float b, float alpha) {
-        bufferBuilder.vertex(poseStack.last().pose(), (float)x, (float)y, (float)z)
-            .color(r, g, b, alpha)
-            .endVertex();
+        notifyActionBar("§7已返回身体");
     }
 
     @Override
     public void onDisable() {
         if (FreecamAPI.isFreecam()) {
-            toggleFreecam();
+            stop();
         }
     }
 
     @Override
-    public void onEnable() {
-        // 不需要特殊初始化
+    public void renderWorld(PoseStack poseStack, Camera camera, float partialTick) {
+        if (!FreecamAPI.isFreecam() || !showBody.get() || anchorPosition == null) return;
+
+        // 在身体留下的位置画一个轮廓，方便知道自己"实际"站在哪
+        AABB body = new AABB(
+            anchorPosition.x - 0.3D, anchorPosition.y, anchorPosition.z - 0.3D,
+            anchorPosition.x + 0.3D, anchorPosition.y + 1.8D, anchorPosition.z + 0.3D);
+
+        RenderUtils.drawWorldFilledBox(poseStack, camera, body, 0.0F, 0.85F, 1.0F, 0.2F);
+        RenderUtils.drawWorldBox(poseStack, camera, body, 0.0F, 0.85F, 1.0F, 0.9F);
+        RenderUtils.drawWorldLabel(poseStack, camera, "§b身体",
+            anchorPosition.x, anchorPosition.y + 2.1D, anchorPosition.z, 0xFFFFFFFF);
     }
 
     @Override
-    public String getDescription() {
-        StringBuilder desc = new StringBuilder(super.getDescription());
-        if (isEnabled()) {
-            desc.append("\n§7按 F6 开关灵魂出窍");
-            if (FreecamAPI.isFreecam()) {
-                desc.append("\n§7当前飞行速度: §e").append(String.format("%.1f", flySpeed));
-                desc.append("\n§7使用鼠标滚轮调节速度");
-                desc.append("\n§7原始模式: §e").append(originalGameMode.getName());
-            }
+    public String getDetailedDescription() {
+        StringBuilder text = new StringBuilder(getTranslatedDescription());
+        text.append("\n§7按 F6 开关，WASD + 空格/潜行移动");
+        text.append(String.format("\n§7飞行速度: §f%.1fx §7(滚轮调节)", flySpeed.value()));
+        if (FreecamAPI.isFreecam()) {
+            text.append("\n§a当前: 已脱离身体");
         }
-        return desc.toString();
+        return text.toString();
     }
-} 
+}

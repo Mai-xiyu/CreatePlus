@@ -2,130 +2,106 @@ package org.xiyu.yee.createplus.features;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import org.xiyu.yee.createplus.utils.GammaOption;
+import org.xiyu.yee.createplus.mixin.OptionInstanceAccessor;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.DoubleSetting;
 
+/**
+ * 夜视 / 全亮。
+ *
+ * 亮度是可调的（README 里一直这么写，但旧版本其实写死成 240 并且
+ * 每 tick 都在往 options.txt 写盘）。
+ */
 public class GammaOverride extends CreativePlusFeature {
-    private double originalGamma;
-    private OptionInstance<Double> gammaOption;
-    private static final double NIGHT_VISION_GAMMA = 240.0D;
-    private boolean isFirstTick = true;
-    private MobEffectInstance nightVisionEffect;
-    private boolean wasEnabled = false;
-    private double nightVisionGamma = 240.0D;
+    private static final double VANILLA_MAX_GAMMA = 1.0D;
+
+    private final DoubleSetting brightness = doubleSetting("brightness", 8.0D, 1.0D, 20.0D, 0.5D);
+    private final BooleanSetting nightVisionEffect = boolSetting("night_vision_effect", true);
+
+    private double savedGamma = VANILLA_MAX_GAMMA;
+    private boolean gammaOverridden = false;
 
     public GammaOverride() {
-        super("gamma_override", "提供更好的夜视效果");
-        initGammaOption();
-        // 创建一个持续时间很长且无粒子效果的夜视效果
-        nightVisionEffect = new MobEffectInstance(
-            MobEffects.NIGHT_VISION,
-            Integer.MAX_VALUE,
-            0,
-            false,  // 是否显示粒子
-            false,  // 是否显示图标
-            false    // 是否显示在背景
-        );
-    }
-
-    private void initGammaOption() {
-        if (Minecraft.getInstance().options != null) {
-            gammaOption = GammaOption.createGammaOption(Minecraft.getInstance().options);
-        }
+        super("gamma_override", "夜视：大幅提高画面亮度，亮度可调", Category.RENDER);
+        brightness.onChange(value -> {
+            if (isEnabled()) applyGamma(value);
+        });
     }
 
     @Override
     public void onEnable() {
-        if (gammaOption == null) {
-            initGammaOption();
-        }
-        
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) {
-            // 保存原始亮度值
-            originalGamma = mc.options.gamma().get();
-            // 设置最大亮度
-            setGamma(NIGHT_VISION_GAMMA);
-            // 添加夜视效果
-            mc.player.addEffect(new MobEffectInstance(nightVisionEffect));
-            isFirstTick = true;
-            wasEnabled = true;
+        if (mc.options == null) return;
+
+        if (!gammaOverridden) {
+            savedGamma = mc.options.gamma().get();
+            gammaOverridden = true;
         }
+        applyGamma(brightness.value());
+        applyNightVision();
+    }
+
+    @Override
+    public void onWorldJoin() {
+        applyGamma(brightness.value());
+        applyNightVision();
     }
 
     @Override
     public void onDisable() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.options != null) {
-            // 恢复原始亮度值
-            setGamma(originalGamma);
+        if (mc.options != null && gammaOverridden) {
+            applyGamma(savedGamma);
+            gammaOverridden = false;
         }
-        if (mc.player != null && wasEnabled) {
-            // 移除夜视效果
-            mc.player.removeEffect(MobEffects.NIGHT_VISION);
-            wasEnabled = false;
-        }
-    }
 
-    private void setGamma(double value) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.options != null) {
-            // 直接修改亮度值
-            mc.options.gamma().set(value);
-            // 保存设置
-            mc.options.save();
+        LocalPlayer player = player();
+        if (player != null && nightVisionEffect.get()) {
+            player.removeEffect(MobEffects.NIGHT_VISION);
         }
-    }
-
-    @Override
-    public String getDescription() {
-        StringBuilder desc = new StringBuilder(super.getDescription());
-        if (isEnabled()) {
-            desc.append("\n§7当前亮度: §e").append(String.format("%.1f", NIGHT_VISION_GAMMA));
-            desc.append("\n§7原始亮度: §7").append(String.format("%.1f", originalGamma));
-            if (Minecraft.getInstance().player != null && 
-                Minecraft.getInstance().player.hasEffect(MobEffects.NIGHT_VISION)) {
-                desc.append("\n§a夜视效果: §a已激活");
-            }
-        }
-        return desc.toString();
     }
 
     @Override
     public void onTick() {
-        if (!isEnabled()) return;
-        
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null) {
-            // 确保亮度保持在最大值
-            double currentGamma = mc.options.gamma().get();
-            if (currentGamma != NIGHT_VISION_GAMMA || isFirstTick) {
-                setGamma(NIGHT_VISION_GAMMA);
-                isFirstTick = false;
-            }
-            
-            // 确保夜视效果持续存在
-            if (!mc.player.hasEffect(MobEffects.NIGHT_VISION)) {
-                mc.player.addEffect(new MobEffectInstance(nightVisionEffect));
-            }
+        if (mc.options == null) return;
+
+        // 别的界面（比如原版亮度滑条）可能把值改回去，这里只在真的不一致时才写
+        if (Math.abs(mc.options.gamma().get() - brightness.value()) > 0.01D) {
+            applyGamma(brightness.value());
         }
+
+        applyNightVision();
     }
 
-    // Getter 和 Setter 方法
-    public double getOriginalGamma() {
-        return originalGamma;
+    private void applyNightVision() {
+        if (!nightVisionEffect.get()) return;
+        LocalPlayer player = player();
+        if (player == null) return;
+        if (player.hasEffect(MobEffects.NIGHT_VISION)) return;
+
+        // 隐藏粒子与图标，避免屏幕上一直挂着药水效果
+        player.addEffect(new MobEffectInstance(
+            MobEffects.NIGHT_VISION, Integer.MAX_VALUE, 0, false, false, false));
     }
 
-    public void setOriginalGamma(double originalGamma) {
-        this.originalGamma = originalGamma;
+    private void applyGamma(double value) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.options == null) return;
+
+        // 一律直接写字段：既能超出原版上限，又不会把亮度存进 options.txt，
+        // 关掉功能后玩家原来的亮度设置还在
+        OptionInstance<Double> gamma = mc.options.gamma();
+        ((OptionInstanceAccessor) (Object) gamma).createplus$setRawValue(value);
     }
 
-    public double getNightVisionGamma() {
-        return nightVisionGamma;
+    @Override
+    public String getDetailedDescription() {
+        return getTranslatedDescription()
+            + String.format("\n§7亮度: §f%.1f §7(原始 %.2f)", brightness.value(), savedGamma)
+            + (nightVisionEffect.get() ? "\n§7附带无粒子夜视效果" : "");
     }
-
-    public void setNightVisionGamma(double nightVisionGamma) {
-        this.nightVisionGamma = nightVisionGamma;
-    }
-} 
+}

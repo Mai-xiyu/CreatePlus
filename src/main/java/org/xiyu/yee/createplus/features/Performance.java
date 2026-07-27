@@ -1,106 +1,106 @@
 package org.xiyu.yee.createplus.features;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.client.gui.components.Button;
-import org.xiyu.yee.createplus.ui.PerformanceSettingsScreen;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.DoubleSetting;
+import org.xiyu.yee.createplus.settings.IntSetting;
 
+/**
+ * 一组客户端渲染 / 体验优化开关（参考 Graphene 等开源思路，纯客户端）。
+ *
+ * 各个开关由对应的 mixin 读取；功能本身必须开启才会生效。
+ */
 public class Performance extends CreativePlusFeature {
-    private boolean disableBlockBreakingParticles = false;
-    private boolean disableDeadMobRendering = false;
-    private boolean disableEntityRendering = false;
-    private boolean disableFallingBlockEntityRendering = false;
-    private boolean disableParticles = false;
-    private boolean disablePortalGuiClosing = false;
+    private final BooleanSetting disableParticles = boolSetting("disable_particles", false);
+    private final BooleanSetting disableBlockBreakingParticles =
+        boolSetting("disable_block_breaking_particles", true);
+    private final BooleanSetting disableDeadMobRendering = boolSetting("disable_dead_mob_rendering", false);
+    private final BooleanSetting disableEntityRendering = boolSetting("disable_entity_rendering", false);
+    private final BooleanSetting disableFallingBlockRendering =
+        boolSetting("disable_falling_block_rendering", false);
+    private final BooleanSetting disablePortalGuiClosing = boolSetting("disable_portal_gui_closing", false);
+
+    // —— Graphene 风格优化 ——
+    private final BooleanSetting skipUnderwaterSky = boolSetting("skip_underwater_sky", true);
+    private final BooleanSetting skipOutlineWhenNoGlow = boolSetting("skip_outline_when_no_glow", true);
+    private final BooleanSetting particleLod = boolSetting("particle_lod", true);
+    private final DoubleSetting particleLodDistance = doubleSetting("particle_lod_distance", 48.0D, 16.0D, 128.0D, 1.0D);
+    private final DoubleSetting particleLodKeepChance = doubleSetting("particle_lod_keep_chance", 0.25D, 0.0D, 1.0D, 0.05D);
+    private final BooleanSetting distantChestSkip = boolSetting("distant_chest_skip", true);
+    private final IntSetting distantChestChunks = intSetting("distant_chest_chunks", 4, 1, 16);
+    private final BooleanSetting inactiveFpsLimit = boolSetting("inactive_fps_limit", true);
+    private final IntSetting inactiveFps = intSetting("inactive_fps", 30, 5, 120);
+    private final BooleanSetting bambooFullBright = boolSetting("bamboo_full_bright", false);
 
     public Performance() {
-        super("performance", "提供多种性能优化选项");
-    }
-
-    public void openSettings(Screen parent) {
-        Minecraft.getInstance().setScreen(new PerformanceSettingsScreen(parent, this));
-    }
-
-    public Button createSettingsButton(Screen parent) {
-        return Button.builder(
-            Component.literal("性能优化..."),
-            button -> Minecraft.getInstance().setScreen(new PerformanceSettingsScreen(parent, this))
-        ).bounds(0, 0, 200, 20).build();
-    }
-
-    // Getters and Setters
-    public boolean isDisableBlockBreakingParticles() {
-        return disableBlockBreakingParticles;
-    }
-
-    public void setDisableBlockBreakingParticles(boolean value) {
-        this.disableBlockBreakingParticles = value;
-    }
-
-    public boolean isDisableDeadMobRendering() {
-        return disableDeadMobRendering;
-    }
-
-    public void setDisableDeadMobRendering(boolean value) {
-        this.disableDeadMobRendering = value;
-    }
-
-    public boolean isDisableEntityRendering() {
-        return disableEntityRendering;
-    }
-
-    public void setDisableEntityRendering(boolean value) {
-        this.disableEntityRendering = value;
-    }
-
-    public boolean isDisableFallingBlockEntityRendering() {
-        return disableFallingBlockEntityRendering;
-    }
-
-    public void setDisableFallingBlockEntityRendering(boolean value) {
-        this.disableFallingBlockEntityRendering = value;
+        super("performance", "性能优化：粒子、实体、天空、箱子距离与失焦限帧等", Category.SYSTEM);
     }
 
     public boolean isDisableParticles() {
-        return disableParticles;
+        return disableParticles.get();
     }
 
-    public void setDisableParticles(boolean value) {
-        this.disableParticles = value;
+    public boolean isDisableBlockBreakingParticles() {
+        return disableBlockBreakingParticles.get();
+    }
+
+    public boolean isDisableDeadMobRendering() {
+        return disableDeadMobRendering.get();
+    }
+
+    public boolean isDisableEntityRendering() {
+        return disableEntityRendering.get();
+    }
+
+    public boolean isDisableFallingBlockRendering() {
+        return disableFallingBlockRendering.get();
     }
 
     public boolean isDisablePortalGuiClosing() {
-        return disablePortalGuiClosing;
+        return disablePortalGuiClosing.get();
     }
 
-    public void setDisablePortalGuiClosing(boolean value) {
-        this.disablePortalGuiClosing = value;
+    public boolean isSkipUnderwaterSky() {
+        return isEnabled() && skipUnderwaterSky.get();
+    }
+
+    public boolean isSkipOutlineWhenNoGlow() {
+        return isEnabled() && skipOutlineWhenNoGlow.get();
+    }
+
+    public boolean isParticleLod() {
+        return isEnabled() && particleLod.get();
+    }
+
+    public double getParticleLodDistance() {
+        return particleLodDistance.value();
+    }
+
+    public double getParticleLodKeepChance() {
+        return particleLodKeepChance.value();
+    }
+
+    public boolean isDistantChestSkip() {
+        return isEnabled() && distantChestSkip.get();
+    }
+
+    public int getDistantChestChunks() {
+        return distantChestChunks.value();
+    }
+
+    public boolean isInactiveFpsLimit() {
+        return isEnabled() && inactiveFpsLimit.get();
+    }
+
+    public int getInactiveFps() {
+        return inactiveFps.value();
+    }
+
+    public boolean isBambooFullBright() {
+        return isEnabled() && bambooFullBright.get();
     }
 
     @Override
-    public String getDescription() {
-        return super.getDescription() + "\n§7在选项中可以找到性能优化设置";
+    public String getDetailedDescription() {
+        return getTranslatedDescription() + "\n§7可在 选项 → 性能优化 中详细配置";
     }
-
-    @Override
-    public void handleClick(boolean isRightClick) {
-        // 移除左键打开设置界面的功能
-        // 现在只能通过选项菜单中的按钮打开设置界面
-    }
-
-    @Override
-    public void onTick() {
-        // 不需要tick更新
-    }
-
-    @Override
-    public void onEnable() {
-        // 不需要特殊初始化
-    }
-
-    @Override
-    public void onDisable() {
-        // 不需要特殊清理
-    }
-} 
+}

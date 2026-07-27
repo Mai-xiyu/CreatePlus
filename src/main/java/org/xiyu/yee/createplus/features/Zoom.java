@@ -1,82 +1,77 @@
 package org.xiyu.yee.createplus.features;
 
-import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.DoubleSetting;
 import org.xiyu.yee.createplus.utils.KeyBindings;
 
+/**
+ * 按住缩放键放大视角。
+ *
+ * 通过 FOV 事件临时改变视野，不会像旧实现那样把玩家在视频设置里的 FOV 覆盖掉
+ * （那个 bug 在缩放中崩溃或切服时会让 FOV 永久变成 30）。
+ */
 public class Zoom extends CreativePlusFeature {
-    private boolean isZooming = false;
-    private float zoomLevel = 4.0f;
-    private int originalFov;
-    private static final float MIN_ZOOM = 1.0f;
-    private static final float MAX_ZOOM = 10.0f;
-    private static final float ZOOM_STEP = 0.5f;
-    private static final float SMOOTH_FACTOR = 0.15f;
-    private float currentZoom = 1.0f;
+    private final DoubleSetting level = doubleSetting("level", 4.0D, 1.5D, 20.0D, 0.5D);
+    private final BooleanSetting smooth = boolSetting("smooth", true);
+    private final DoubleSetting smoothSpeed = doubleSetting("smooth_speed", 0.25D, 0.05D, 1.0D, 0.05D);
+    private final BooleanSetting scrollToAdjust = boolSetting("scroll_to_adjust", true);
+
+    private boolean zooming = false;
+    private double currentZoom = 1.0D;
 
     public Zoom() {
-        super("zoom", "允许玩家缩放视角");
+        super("zoom", "按住缩放键放大视角，滚轮调节倍率", Category.RENDER);
     }
 
     @Override
     public void onEnable() {
-        // 不需要特殊初始化
-    }
-
-    @Override
-    public void onTick() {
-        if (!isEnabled()) return;
-        
-        Minecraft mc = Minecraft.getInstance();
-
-        // 处理缩放开关
-        if (KeyBindings.TOGGLE_ZOOM.isDown()) {
-            if (!isZooming) {
-                // 开始缩放
-                isZooming = true;
-                originalFov = mc.options.fov().get();
-            }
-            
-            // 处理鼠标滚轮
-            double scroll = mc.mouseHandler.getXVelocity();
-            if (scroll != 0) {
-                float delta = (float) (Math.signum(scroll) * ZOOM_STEP);
-                zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + delta));
-            }
-            
-            // 平滑过渡
-            currentZoom += (zoomLevel - currentZoom) * SMOOTH_FACTOR;
-            // 确保FOV值在有效范围内 (30-110)
-            int newFov = (int) Math.max(30, Math.min(110, originalFov / currentZoom));
-            mc.options.fov().set(newFov);
-            
-        } else if (isZooming) {
-            // 结束缩放
-            isZooming = false;
-            currentZoom = 1.0f;
-            mc.options.fov().set(originalFov);
-        }
+        MinecraftForge.EVENT_BUS.register(this);
     }
 
     @Override
     public void onDisable() {
-        if (isZooming) {
-            Minecraft mc = Minecraft.getInstance();
-            isZooming = false;
-            currentZoom = 1.0f;
-            mc.options.fov().set(originalFov);
+        MinecraftForge.EVENT_BUS.unregister(this);
+        zooming = false;
+        currentZoom = 1.0D;
+    }
+
+    @Override
+    public void onTick() {
+        zooming = KeyBindings.TOGGLE_ZOOM.isDown();
+    }
+
+    @Override
+    public boolean handleScroll(double delta) {
+        if (!zooming || !scrollToAdjust.get()) return false;
+        level.cycle(delta > 0 ? 1 : -1);
+        notifyActionBar(String.format("§b缩放: §f%.1fx", level.value()));
+        return true;
+    }
+
+    @SubscribeEvent
+    public void onComputeFov(ViewportEvent.ComputeFov event) {
+        if (!event.usedConfiguredFov()) return;
+
+        double target = zooming ? level.value() : 1.0D;
+        if (smooth.get()) {
+            currentZoom += (target - currentZoom) * smoothSpeed.value();
+            if (Math.abs(target - currentZoom) < 0.01D) currentZoom = target;
+        } else {
+            currentZoom = target;
+        }
+
+        if (currentZoom > 1.001D) {
+            event.setFOV(event.getFOV() / currentZoom);
         }
     }
 
     @Override
-    public String getDescription() {
-        StringBuilder desc = new StringBuilder(super.getDescription());
-        if (isEnabled()) {
-            desc.append("\n§7按住 C 进行缩放");
-            if (isZooming) {
-                desc.append("\n§7当前缩放: §e").append(String.format("%.1fx", zoomLevel));
-                desc.append("\n§7使用鼠标滚轮调节缩放");
-            }
-        }
-        return desc.toString();
+    public String getDetailedDescription() {
+        return getTranslatedDescription()
+            + String.format("\n§7当前倍率: §f%.1fx", level.value())
+            + "\n§7在按键设置中可以修改缩放键";
     }
-} 
+}

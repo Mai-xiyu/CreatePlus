@@ -1,94 +1,489 @@
 {
-  "Improved Flight": {
-    "enabled": false
+  "ui": {
+    "opacity": 0.95
   },
-  "Infinite Placement": {
-    "enabled": false
-  },
-  "Speed Build": {
-    "enabled": false
-  },
-  "Area Copy": {
-    "enabled": false
-  },
-  "Mirror Build": {
-    "enabled": false
-  },
-  "Spin Bot": {
-    "enabled": false
-  },
-  "Nucker": {
-    "enabled": false
-  },
-  "Area Place": {
-    "enabled": false
-  },
-  "Block Color Swap": {
-    "enabled": false
-  },
-  "Building Export": {
-    "enabled": false
-  },
-  "Scaffold": {
-    "enabled": true
-  },
-  "Night Vision": {
-    "enabled": false,
-    "originalGamma": 0.0,
-    "nightVisionGamma": 240.0
-  },
-  "Ping Display": {
-    "enabled": false,
-    "backgroundColor": -2147483648,
-    "backgroundOpacity": 0.5
-  },
-  "Gibbon": {
-    "enabled": true
-  },
-  "Speed Adjust": {
-    "enabled": true,
-    "speeds": {
-      "WALK": 2.0,
-      "FLY": 2.0,
-      "RIDE": 2.0,
-      "SWIM": 2.0,
-      "ELYTRA": 2.0,
-      "SPINBOT": 2.0
+  "hud_layout": {
+    "mini_hud": {
+      "x": 2,
+      "y": 385,
+      "custom": true
+    },
+    "block_info": {
+      "x": 0,
+      "y": 196,
+      "custom": true
+    },
+    "ping": {
+      "x": 0,
+      "y": 282,
+      "custom": true
+    },
+    "scoreboard": {
+      "x": -1170,
+      "y": 52,
+      "custom": true
+    },
+    "health": {
+      "x": 0,
+      "y": 0,
+      "custom": true
+    },
+    "hotbar": {
+      "x": 0,
+      "y": 0,
+      "custom": true
+    },
+    "experience": {
+      "x": 0,
+      "y": 0,
+      "custom": true
+    },
+    "boss_bar": {
+      "x": 0,
+      "y": 0,
+      "custom": true
+    },
+    "effects": {
+      "x": 0,
+      "y": 0,
+      "custom": true
     }
   },
-  "Freecam": {
-    "enabled": false
+  "ai_studio": {
+    "prompt": "我想要一周功能，拿着胡萝卜杆右键就会出现飞剑往准心飞过去，蹲下右键就会有镭射眼，镭射眼你可以用Minecraft原版粒子实现",
+    "command": "execute as @a[scores\u003d{used_carrot\u003d1..}] at @s if entity @s[nbt\u003d{Sneaking:1b}] run particle minecraft:flame ^ ^ ^0.5 0 0 0 0 1 force",
+    "ooc": "summon falling_block ~ ~1 ~ {Time:1,BlockState:{Name:\"minecraft:redstone_block\"},Passengers:[{id:\"minecraft:falling_block\",Time:1,BlockState:{Name:\"minecraft:activator_rail\"},Passengers:[{id:\"minecraft:command_block_minecart\",Command:\"execute as @a[scores\u003d{used_carrot\u003d1..}] at @s if entity @s[nbt\u003d{Sneaking:1b}] run particle minecraft:flame ^ ^ ^0.5 0 0 0 0 1 force\"},{id:\"minecraft:command_block_minecart\",Command:\"setblock ~ ~-2 ~ command_block{Command:\\\"execute as @a[scores\u003d{used_carrot\u003d1..}] at @s if entity @s[nbt\u003d{Sneaking:1b}] run particle minecraft:flame ^ ^ ^0.5 0 0 0 0 1 force\\\"}\"},{id:\"minecraft:command_block_minecart\",Command:\"kill @e[type\u003dcommand_block_minecart,distance\u003d..1]\"}]}]}",
+    "status": "已用本地模板包装为 OOC",
+    "mode": "BOTH"
   },
-  "Zoom": {
-    "enabled": false
-  },
-  "Performance": {
-    "enabled": false,
-    "disableParticles": false,
-    "disableBlockBreakingParticles": false,
-    "disableDeadMobRendering": false,
-    "disableEntityRendering": false,
-    "disableFallingBlockEntityRendering": false,
-    "disablePortalGuiClosing": false
-  },
-  "Time Weather": {
-    "enabled": false
-  },
-  "Mini HUD": {
-    "enabled": false,
-    "textColors": {
-      "fps": 16777215,
-      "time": 16777215,
-      "pos": 16777215,
-      "biome": 16777215,
-      "localtime": 16777215
+  "features": {
+    "build_selection": {
+      "enabled": false,
+      "settings": {
+        "wand": "GOLDEN_SHOVEL",
+        "show_box": true,
+        "show_fill": true,
+        "show_corners": true,
+        "show_info": true,
+        "box_color": "#FF00A2FF"
+      }
     },
-    "valueColors": {
-      "fps": 16777215,
-      "time": 16777215,
-      "pos": 16777215,
-      "biome": 16777215,
-      "localtime": 16777215
+    "speed_build": {
+      "enabled": true,
+      "settings": {
+        "delay": 0
+      }
+    },
+    "infinite_placement": {
+      "enabled": false,
+      "settings": {
+        "whole_hotbar": false
+      }
+    },
+    "area_fill": {
+      "enabled": false,
+      "settings": {
+        "mode": "CLEAR",
+        "per_tick": 65
+      }
+    },
+    "area_copy": {
+      "enabled": false,
+      "settings": {
+        "anchor": "LOOK",
+        "rotation": "NONE",
+        "mirror": "NONE",
+        "include_air": false
+      }
+    },
+    "mirror_build": {
+      "enabled": false,
+      "settings": {
+        "axis": "BOTH",
+        "show_plane": true,
+        "plane_color": "#FFFFC24B"
+      }
+    },
+    "paint_palette": {
+      "enabled": true,
+      "settings": {
+        "patch_size": 5.0,
+        "seed": 1
+      }
+    },
+    "placement_restriction": {
+      "enabled": false,
+      "settings": {
+        "mode": "LAYER",
+        "show_anchor": true,
+        "anchor_color": "#FF52D273"
+      }
+    },
+    "curve_builder": {
+      "enabled": false,
+      "settings": {
+        "wand": "BLAZE_ROD",
+        "thickness": 1,
+        "tension": 0.0,
+        "closed": false,
+        "show_points": true,
+        "curve_color": "#66FFC24B"
+      }
+    },
+    "shape_studio": {
+      "enabled": false,
+      "settings": {
+        "shape": "CYLINDER",
+        "radius": 8,
+        "height": 9,
+        "thickness": 3,
+        "turns": 3.5,
+        "hollow": false,
+        "axis": "Y",
+        "follow_crosshair": true,
+        "preview_color": "#6600A2FF"
+      }
+    },
+    "block_color_swap": {
+      "enabled": true,
+      "settings": {
+        "play_sound": true,
+        "show_name": true
+      }
+    },
+    "area_place": {
+      "enabled": false,
+      "settings": {
+        "shape": "SPHERE",
+        "radius": 2,
+        "delay": 2,
+        "show_preview": true,
+        "use_offhand": false
+      }
+    },
+    "nucker": {
+      "enabled": false,
+      "settings": {
+        "shape": "SPHERE",
+        "radius": 2,
+        "delay": 1,
+        "show_preview": true,
+        "keep_floor": true
+      }
+    },
+    "building_export": {
+      "enabled": false,
+      "settings": {
+        "include_air": false,
+        "relative_coords": true
+      }
+    },
+    "scaffold": {
+      "enabled": false,
+      "settings": {
+        "mode": "ALWAYS",
+        "tower": false,
+        "while_flying": false
+      }
+    },
+    "improved_flight": {
+      "enabled": true,
+      "settings": {
+        "instant_stop": true,
+        "drag": 0.05,
+        "vertical_boost": 3.0
+      }
+    },
+    "speed_adjust": {
+      "enabled": false,
+      "settings": {
+        "walk": 10.0,
+        "fly": 8.3,
+        "swim": 4.1,
+        "elytra": 1.0,
+        "ride": 5.0
+      }
+    },
+    "extended_reach": {
+      "enabled": true,
+      "settings": {
+        "block_bonus": 32.0,
+        "entity_bonus": 32.0
+      }
+    },
+    "noclip": {
+      "enabled": false,
+      "settings": {
+        "speed": 1.0,
+        "keep_flying": false,
+        "ignore_rubberband": true
+      }
+    },
+    "step_assist": {
+      "enabled": true,
+      "settings": {
+        "height": 2.5
+      }
+    },
+    "liquid_walk": {
+      "enabled": true,
+      "settings": {
+        "lava": true,
+        "water": true
+      }
+    },
+    "fast_break": {
+      "enabled": true
+    },
+    "spinbot": {
+      "enabled": true,
+      "settings": {
+        "degrees_per_tick": 53.0,
+        "rotate_body": true
+      }
+    },
+    "snap_aim": {
+      "enabled": false,
+      "settings": {
+        "yaw_step": 45,
+        "snap_pitch": true,
+        "pitch_step": 45,
+        "free_while_sneaking": true
+      }
+    },
+    "air_place": {
+      "enabled": false,
+      "settings": {
+        "reach": 5.0
+      }
+    },
+    "auto_bridge": {
+      "enabled": false,
+      "settings": {
+        "only_when_moving": true,
+        "require_sneak": false
+      }
+    },
+    "measure_ruler": {
+      "enabled": false,
+      "settings": {
+        "color": "#E0FFC24B"
+      }
+    },
+    "layer_slice": {
+      "enabled": false,
+      "settings": {
+        "mode": "ONLY_LAYER",
+        "layer": 64,
+        "thickness": 1,
+        "plane_size": 24,
+        "plane_color": "#4400A2FF"
+      }
+    },
+    "auto_pick": {
+      "enabled": false,
+      "settings": {
+        "copy_nbt": true
+      }
+    },
+    "freecam": {
+      "enabled": false,
+      "settings": {
+        "fly_speed": 1.0,
+        "show_body": true,
+        "scroll_to_adjust": true
+      }
+    },
+    "zoom": {
+      "enabled": false,
+      "settings": {
+        "level": 20.0,
+        "smooth": true,
+        "smooth_speed": 0.05,
+        "scroll_to_adjust": true
+      }
+    },
+    "gamma_override": {
+      "enabled": true,
+      "settings": {
+        "brightness": 8.0,
+        "night_vision_effect": true
+      }
+    },
+    "chunk_borders": {
+      "enabled": false,
+      "settings": {
+        "radius": 8,
+        "vertical_lines": true,
+        "sub_chunks": true,
+        "grid": true,
+        "color": "#FF00FFFF",
+        "sub_color": "#FF808080"
+      }
+    },
+    "light_overlay": {
+      "enabled": false,
+      "settings": {
+        "radius": 12,
+        "vertical_range": 6,
+        "refresh_ticks": 10,
+        "show_night_only": true,
+        "always_color": "#FFFF4444",
+        "night_color": "#FFFFD24B"
+      }
+    },
+    "time_weather": {
+      "enabled": false,
+      "settings": {
+        "freeze_time": true,
+        "time": 6000,
+        "weather": "CLEAR"
+      }
+    },
+    "storage_esp": {
+      "enabled": false,
+      "settings": {
+        "range": 95,
+        "refresh_ticks": 40,
+        "color": "#D0FFD24B"
+      }
+    },
+    "waypoints": {
+      "enabled": false,
+      "settings": {
+        "max_points": 64,
+        "auto_interval": 0,
+        "color": "#E055FFAA",
+        "beam_color": "#8800FFAA"
+      }
+    },
+    "camera_clip": {
+      "enabled": true
+    },
+    "anti_overlay": {
+      "enabled": true,
+      "settings": {
+        "clear_blindness": true,
+        "clear_darkness": true,
+        "clear_nausea": true,
+        "clear_wither": true,
+        "night_vision": true
+      }
+    },
+    "state_clipboard": {
+      "enabled": false,
+      "settings": {
+        "apply_on_place": true
+      }
+    },
+    "hotbar_random": {
+      "enabled": false,
+      "settings": {
+        "only_while_using": true
+      }
+    },
+    "look_replace": {
+      "enabled": false,
+      "settings": {
+        "require_modifier": true
+      }
+    },
+    "flood_fill": {
+      "enabled": false,
+      "settings": {
+        "max_blocks": 4096
+      }
+    },
+    "map_art": {
+      "enabled": false
+    },
+    "mini_hud": {
+      "enabled": true,
+      "settings": {
+        "corner": "BOTTOM_RIGHT",
+        "offset_x": 4,
+        "offset_y": 4,
+        "line_height": 10,
+        "background": true,
+        "shadow": true,
+        "background_color": "#90000000",
+        "label_color": "#FF9AA4B2",
+        "value_color": "#FFFFFFFF",
+        "hud_opacity": 0.95,
+        "show_fps": true,
+        "show_coords": false,
+        "show_chunk": true,
+        "show_facing": true,
+        "show_biome": false,
+        "show_dimension": true,
+        "show_light": false,
+        "show_game_time": true,
+        "show_real_time": false,
+        "show_speed": false,
+        "show_entities": false
+      }
+    },
+    "block_info": {
+      "enabled": true,
+      "settings": {
+        "corner": "TOP_RIGHT",
+        "offset_x": 4,
+        "offset_y": 4,
+        "line_height": 10,
+        "max_properties": 10,
+        "show_id": true,
+        "show_pos": true,
+        "show_state": true,
+        "show_light": true,
+        "show_entity": true,
+        "background": true,
+        "background_color": "#90000000",
+        "label_color": "#FF9AA4B2",
+        "value_color": "#FFFFFFFF"
+      }
+    },
+    "ping_display": {
+      "enabled": true,
+      "settings": {
+        "name_tags": true,
+        "own_ping": true,
+        "good_threshold": 60,
+        "bad_threshold": 200
+      }
+    },
+    "hud_editor": {
+      "enabled": false
+    },
+    "performance": {
+      "enabled": false,
+      "settings": {
+        "disable_particles": true,
+        "disable_block_breaking_particles": true,
+        "disable_dead_mob_rendering": true,
+        "disable_entity_rendering": true,
+        "disable_falling_block_rendering": true,
+        "disable_portal_gui_closing": true,
+        "skip_underwater_sky": true,
+        "skip_outline_when_no_glow": true,
+        "particle_lod": true,
+        "particle_lod_distance": 48.0,
+        "particle_lod_keep_chance": 0.25,
+        "distant_chest_skip": true,
+        "distant_chest_chunks": 4,
+        "inactive_fps_limit": true,
+        "inactive_fps": 30,
+        "bamboo_full_bright": false
+      }
+    },
+    "command_studio": {
+      "enabled": true,
+      "settings": {
+        "nbt_autocomplete": true,
+        "ai_endpoint": "https://api.deepseek.com/v1/chat/completions",
+        "ai_model": "deepseek-v4-pro",
+        "ai_api_key": "sk-a96359fb21c5495ba23322650fc7ec65",
+        "ai_timeout_sec": 39
+      }
     }
   }
 }

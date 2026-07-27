@@ -1,39 +1,26 @@
 package org.xiyu.yee.createplus.api;
 
-import net.minecraft.world.phys.Vec3;
+/**
+ * 灵魂出窍的共享状态。
+ *
+ * 单独放在这里是因为多个 mixin（移动数据包拦截、旁观判定、飞行判定）
+ * 都需要读它，而 mixin 不方便直接持有功能实例。
+ */
+public final class FreecamAPI {
+    private static boolean freecam;
 
-public class FreecamAPI {
-    private static boolean isFreecam = false;
-    private static Vec3 freecamPos = null;
-    private static float freecamYRot = 0;
-    private static float freecamXRot = 0;
-
-    public static void setFreecamEnabled(boolean enabled) {
-        isFreecam = enabled;
-    }
-
-    public static void setFreecamPosition(Vec3 pos) {
-        freecamPos = pos;
-    }
-
-    public static void setFreecamRotation(float yRot, float xRot) {
-        freecamYRot = yRot;
-        freecamXRot = xRot;
+    private FreecamAPI() {
     }
 
     public static boolean isFreecam() {
-        return isFreecam;
+        return freecam;
     }
 
-    public static Vec3 getFreecamPos() {
-        return freecamPos;
+    public static void setFreecamEnabled(boolean enabled) {
+        freecam = enabled;
     }
 
-    public static float getFreecamYRot() {
-        return freecamYRot;
+    public static void reset() {
+        freecam = false;
     }
-
-    public static float getFreecamXRot() {
-        return freecamXRot;
-    }
-} 
+}

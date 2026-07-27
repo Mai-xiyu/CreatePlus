@@ -1,22 +1,24 @@
 package org.xiyu.yee.createplus.features;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import org.lwjgl.glfw.GLFW;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.utils.KeyBindings;
 
 import java.util.*;
 
+/**
+ * 按住修饰键滚轮，在同类方块之间循环切换颜色/材质。
+ *
+ * 建造时最费时间的操作之一就是翻创造物品栏找另一种颜色的同款方块。
+ */
 public class BlockColorSwap extends CreativePlusFeature {
-    private static final int CHANGE_COOLDOWN = 2; // 添加冷却时间避免过快变化
-    private long lastChangeTime = 0;
 
-    // 定义可切换颜色的方块组
+    /** 可互换的方块组，key 是组里的每个物品，value 是整个组。 */
     private static final Map<Item, List<Item>> COLOR_GROUPS = new HashMap<>();
     
     static {
@@ -199,94 +201,56 @@ public class BlockColorSwap extends CreativePlusFeature {
         for (Item item : fences) COLOR_GROUPS.put(item, fences);
     }
 
+    private final BooleanSetting playSound = boolSetting("play_sound", true);
+    private final BooleanSetting showName = boolSetting("show_name", true);
+
     public BlockColorSwap() {
-        super("block_color_swap", "按住左CTRL并滚动鼠标滚轮切换同类方块颜色");
-        MinecraftForge.EVENT_BUS.register(this);
+        super("block_color_swap", "按住修饰键滚轮，在同类方块间切换颜色", Category.BUILDING);
     }
 
-    @SubscribeEvent
-    public void onMouseScroll(InputEvent.MouseScrollingEvent event) {
-        if (!isEnabled()) return;
-
+    @Override
+    public boolean handleScroll(double delta) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
+        LocalPlayer player = mc.player;
+        if (player == null || !player.isCreative() || mc.gameMode == null) return false;
+        if (!KeyBindings.modifierDown()) return false;
 
-        // 检查是否按住左CTRL
-        if (!InputConstants.isKeyDown(mc.getWindow().getWindow(), GLFW.GLFW_KEY_LEFT_CONTROL)) return;
+        ItemStack held = player.getMainHandItem();
+        List<Item> group = COLOR_GROUPS.get(held.getItem());
+        if (group == null) return false;
 
-        // 检查冷却时间
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastChangeTime < CHANGE_COOLDOWN) {
-            event.setCanceled(true);
-            return;
+        int index = group.indexOf(held.getItem());
+        if (index < 0) return false;
+
+        int next = (index + (delta > 0 ? 1 : -1) + group.size()) % group.size();
+        ItemStack replacement = new ItemStack(group.get(next), held.getCount());
+        if (held.hasTag()) {
+            replacement.setTag(held.getTag().copy());
         }
 
-        // 获取玩家手中的物品
-        ItemStack mainHand = mc.player.getMainHandItem();
-        if (mainHand.isEmpty()) return;
+        int slot = player.getInventory().selected;
+        player.getInventory().items.set(slot, replacement);
+        // 创造物品栏槽位编号：快捷栏从 36 开始
+        mc.gameMode.handleCreativeModeItemAdd(replacement.copy(), 36 + slot);
 
-        // 检查是否是可变色物品
-        List<Item> group = COLOR_GROUPS.get(mainHand.getItem());
-        if (group != null) {
-            int currentIndex = group.indexOf(mainHand.getItem());
-            if (currentIndex != -1) {
-                // 计算新的索引
-                int newIndex;
-                if (event.getScrollDelta() > 0) {
-                    newIndex = (currentIndex + 1) % group.size();
-                } else {
-                    newIndex = (currentIndex - 1 + group.size()) % group.size();
-                }
-
-                // 创建新的物品堆并保持数量
-                ItemStack newStack = new ItemStack(group.get(newIndex), mainHand.getCount());
-                
-                // 如果原物品有NBT，复制NBT
-                if (mainHand.hasTag()) {
-                    newStack.setTag(mainHand.getTag().copy());
-                }
-
-                // 更新客户端物品栏
-                int slot = mc.player.getInventory().selected;
-                mc.player.getInventory().items.set(slot, newStack);
-
-                // 同步到服务端
-                mc.gameMode.handleCreativeModeItemAdd(newStack.copy(), 36 + slot); // 36是快捷栏的起始索引
-
-                // 播放音效和更新冷却时间
-                mc.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.2F, 1.0F);
-                lastChangeTime = currentTime;
-            }
+        if (playSound.get()) {
+            player.playSound(SoundEvents.UI_BUTTON_CLICK.value(), 0.2F, 1.6F);
         }
-
-        // 取消滚动事件
-        event.setCanceled(true);
-    }
-
-    private net.minecraft.world.level.block.state.BlockState copyBlockProperties(
-        net.minecraft.world.level.block.state.BlockState from, 
-        net.minecraft.world.level.block.state.BlockState to) {
-        // 复制方块的朝向等属性
-        for (net.minecraft.world.level.block.state.properties.Property<?> prop : from.getProperties()) {
-            if (to.hasProperty(prop)) {
-                to = copyProperty(from, to, prop);
-            }
+        if (showName.get()) {
+            notifyActionBar("§b" + replacement.getHoverName().getString()
+                + " §7(" + (next + 1) + "/" + group.size() + ")");
         }
-        return to;
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T extends Comparable<T>> net.minecraft.world.level.block.state.BlockState copyProperty(
-        net.minecraft.world.level.block.state.BlockState from,
-        net.minecraft.world.level.block.state.BlockState to,
-        net.minecraft.world.level.block.state.properties.Property<T> prop) {
-        return to.setValue(prop, from.getValue(prop));
+        return true;
     }
 
     @Override
-    public void onEnable() {}
-
-    @Override
-    public void onDisable() {}
-
+    public String getDetailedDescription() {
+        Item held = Minecraft.getInstance().player != null
+            ? Minecraft.getInstance().player.getMainHandItem().getItem() : null;
+        List<Item> group = held == null ? null : COLOR_GROUPS.get(held);
+        return getTranslatedDescription()
+            + "\n§7按住 §f" + KeyBindings.MODIFIER.getTranslatedKeyMessage().getString()
+            + " §7再滚动滚轮"
+            + "\n§7当前手持: §f" + (group == null ? "不支持切换" : group.size() + " 种可选");
+    }
 } 

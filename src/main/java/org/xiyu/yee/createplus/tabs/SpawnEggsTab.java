@@ -1,80 +1,61 @@
 package org.xiyu.yee.createplus.tabs;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
-import org.xiyu.yee.createplus.Createplus;
 
-public class SpawnEggsTab {
+import java.util.Set;
+
+/**
+ * 全实体刷怪蛋标签页。
+ *
+ * 原版只给一部分生物做了刷怪蛋，剩下的（凋灵、末影龙、铁傀儡、各种载具……）
+ * 只能靠命令生成。这里给每个可召唤的实体都摆一颗蛋：有原版蛋的用原版蛋，
+ * 没有的用一颗写了 {@code EntityTag} 的蛋顶上。
+ *
+ * 这个 NBT 是原版 {@link SpawnEggItem} 自己认的，所以拿到的蛋在纯净服务端
+ * 上一样能用，不需要对方装模组。
+ */
+public final class SpawnEggsTab {
+
+    /** 生成出来立刻消失或者完全看不见的实体，给蛋没有意义。 */
+    private static final Set<EntityType<?>> SKIPPED = Set.of(
+        EntityType.ITEM,
+        EntityType.EXPERIENCE_ORB,
+        EntityType.FALLING_BLOCK,
+        EntityType.MARKER
+    );
+
+    private SpawnEggsTab() {
+    }
+
     public static void buildContents(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == Createplus.SPAWN_EGGS_TAB.getKey()) {
-            // 遍历所有注册的实体类型
-            for (EntityType<?> entityType : BuiltInRegistries.ENTITY_TYPE) {
-                // 跳过一些特殊实体
-                if (shouldSkipEntity(entityType)) continue;
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
+            // canSummon 已经排掉了玩家和鱼钩这类不允许召唤的实体
+            if (!type.canSummon() || SKIPPED.contains(type)) continue;
 
-                // 获取实体ID
-                String entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType).toString();
-                
-                // 检查是否有原版刷怪蛋
-                ItemStack spawnEgg = getVanillaSpawnEgg(entityType);
-                
-                if (spawnEgg == null) {
-                    // 如果没有原版刷怪蛋，创建自定义的
-                    spawnEgg = createCustomSpawnEgg(entityId);
-                }
-
-                // 添加到创造标签页
-                event.accept(spawnEgg);
-            }
+            SpawnEggItem vanilla = SpawnEggItem.byId(type);
+            event.accept(vanilla != null ? new ItemStack(vanilla) : customEgg(type));
         }
     }
 
-    private static boolean shouldSkipEntity(EntityType<?> entityType) {
-        // 跳过一些不应该有刷怪蛋的实体
-        return entityType == EntityType.PLAYER || 
-               entityType == EntityType.FISHING_BOBBER ||
-               entityType == EntityType.LIGHTNING_BOLT ||
-               entityType == EntityType.AREA_EFFECT_CLOUD ||
-               entityType == EntityType.MARKER ||
-               entityType == EntityType.ITEM ||
-               entityType == EntityType.EXPERIENCE_ORB ||
-               entityType == EntityType.TNT ||
-               entityType == EntityType.FALLING_BLOCK;
-    }
+    /** 借一颗原版蛋当壳子，用 EntityTag 指定真正要生成的实体。 */
+    private static ItemStack customEgg(EntityType<?> type) {
+        ItemStack stack = new ItemStack(Items.SKELETON_HORSE_SPAWN_EGG);
 
-    private static ItemStack getVanillaSpawnEgg(EntityType<?> entityType) {
-        // 遍历所有物品查找对应的刷怪蛋
-        for (var item : BuiltInRegistries.ITEM) {
-            if (item instanceof net.minecraft.world.item.SpawnEggItem spawnEgg) {
-                if (spawnEgg.getType(null) == entityType) {
-                    return new ItemStack(item);
-                }
-            }
-        }
-        return null;
-    }
-
-    private static ItemStack createCustomSpawnEgg(String entityId) {
-        // 创建普通刷怪蛋并添加实体NBT
-        ItemStack spawnEgg = new ItemStack(Items.SKELETON_HORSE_SPAWN_EGG);
-        CompoundTag tag = new CompoundTag();
-        tag.putString("entity_type", entityId);
-        
-        // 添加显示名称
-        CompoundTag display = new CompoundTag();
-        display.putString("Name", "{\"text\":\"" + entityId + " Spawn Egg\"}");
-        tag.put("display", display);
-        
-        // 添加实体数据
         CompoundTag entityTag = new CompoundTag();
-        entityTag.putString("id", entityId);
-        tag.put("EntityTag", entityTag);
-        
-        spawnEgg.setTag(tag);
-        return spawnEgg;
+        entityTag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
+        stack.getOrCreateTag().put("EntityTag", entityTag);
+
+        // 不关斜体的话，改过名字的物品在物品栏里全是斜体，一眼看过去很乱
+        stack.setHoverName(Component.translatable("createplus.spawn_egg", type.getDescription())
+            .withStyle(style -> style.withItalic(false).withColor(ChatFormatting.YELLOW)));
+        return stack;
     }
-} 
+}

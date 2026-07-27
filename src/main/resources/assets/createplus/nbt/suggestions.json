@@ -1,0 +1,18 @@
+{
+  "entity": [
+    "CustomName", "CustomNameVisible", "NoAI", "Silent", "Invulnerable", "Glowing",
+    "PersistenceRequired", "Health", "AbsorptionAmount", "Pos", "Motion", "Rotation",
+    "HandItems", "ArmorItems", "ActiveEffects", "Attributes", "Tags", "Passengers"
+  ],
+  "item": [
+    "display", "Enchantments", "Damage", "Unbreakable", "CustomModelData",
+    "AttributeModifiers", "HideFlags", "RepairCost", "SkullOwner", "BlockEntityTag",
+    "EntityTag", "Potion", "CustomPotionEffects", "StoredEnchantments"
+  ],
+  "block": [
+    "Command", "LastOutput", "SuccessCount", "TrackOutput", "auto", "Items", "Lock", "LootTable"
+  ],
+  "generic": [
+    "id", "Count", "tag", "Name", "Value", "Level", "Duration", "Amplifier"
+  ]
+}

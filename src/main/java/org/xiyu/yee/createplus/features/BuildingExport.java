@@ -2,120 +2,84 @@ package org.xiyu.yee.createplus.features;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.Items;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.utils.BlockEdits;
+import org.xiyu.yee.createplus.utils.Selection;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.IOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * 把选区里的建筑写成 .mcfunction，方便搬到别的存档。
+ *
+ * 命令入口在 {@code /createplus export <名称>}，选区来自选区工具，
+ * 不再自己维护一套木铲选点逻辑。
+ */
 public class BuildingExport extends CreativePlusFeature {
-    private BlockPos firstPos = null;
-    private BlockPos secondPos = null;
-    private Map<BlockPos, BlockState> selectedBlocks = new HashMap<>();
+    private final BooleanSetting includeAir = boolSetting("include_air", false);
+    private final BooleanSetting relativeCoords = boolSetting("relative_coords", true);
 
     public BuildingExport() {
-        super("building_export", "使用木铲选择区域并导出建筑");
+        super("building_export", "把选区导出为 .mcfunction 文件", Category.BUILDING);
     }
 
-    @Override
-    public void onEnable() {
-        firstPos = null;
-        secondPos = null;
-        selectedBlocks.clear();
-        Minecraft.getInstance().player.sendSystemMessage(
-            Component.literal("§b建筑导出已启用，使用木铲右键选择两个点")
-        );
-    }
-
-    @Override
-    public void onDisable() {
-        firstPos = null;
-        secondPos = null;
-        selectedBlocks.clear();
-    }
-
-    public void handleClick(boolean isRightClick) {
-        if (!isEnabled()) return;
-
+    /**
+     * 导出当前选区。
+     *
+     * @return 写出的方块数量，失败时返回 -1
+     */
+    public int export(Path file) throws IOException {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
+        Selection selection = Selection.shared();
+        if (mc.level == null || !selection.isComplete()) return -1;
 
-        // 检查是否手持木铲
-        if (!mc.player.getMainHandItem().is(Items.WOODEN_SHOVEL)) {
-            return;
-        }
+        BlockPos min = selection.getMin();
+        BlockPos max = selection.getMax();
+        List<String> lines = new ArrayList<>();
 
-        if (mc.hitResult == null || mc.hitResult.getType() != HitResult.Type.BLOCK) return;
-        BlockHitResult blockHit = (BlockHitResult) mc.hitResult;
-        BlockPos pos = blockHit.getBlockPos();
-
-        if (isRightClick) {
-            if (firstPos == null) {
-                firstPos = pos;
-                mc.player.sendSystemMessage(
-                    Component.literal("§a已设置第一个点: " + pos.toShortString())
-                );
-            } else {
-                secondPos = pos;
-                mc.player.sendSystemMessage(
-                    Component.literal("§a已设置第二个点: " + pos.toShortString())
-                );
-                updateSelection();
-            }
-        } else {
-            // 左键重置选择
-            firstPos = null;
-            secondPos = null;
-            selectedBlocks.clear();
-            mc.player.sendSystemMessage(Component.literal("§c已重置选择"));
-        }
-    }
-
-    private void updateSelection() {
-        selectedBlocks.clear();
-        if (firstPos == null || secondPos == null) return;
-
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return;
-
-        int minX = Math.min(firstPos.getX(), secondPos.getX());
-        int minY = Math.min(firstPos.getY(), secondPos.getY());
-        int minZ = Math.min(firstPos.getZ(), secondPos.getZ());
-        int maxX = Math.max(firstPos.getX(), secondPos.getX());
-        int maxY = Math.max(firstPos.getY(), secondPos.getY());
-        int maxZ = Math.max(firstPos.getZ(), secondPos.getZ());
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
+        for (int y = min.getY(); y <= max.getY(); y++) {
+            for (int x = min.getX(); x <= max.getX(); x++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
                     BlockPos pos = new BlockPos(x, y, z);
                     BlockState state = mc.level.getBlockState(pos);
-                    if (!state.isAir()) {
-                        selectedBlocks.put(pos, state);
+                    if (state.isAir() && !includeAir.get()) continue;
+
+                    if (relativeCoords.get()) {
+                        BlockPos rel = pos.subtract(min);
+                        lines.add(String.format("setblock ~%d ~%d ~%d %s",
+                            rel.getX(), rel.getY(), rel.getZ(), BlockEdits.toCommandString(state)));
+                    } else {
+                        lines.add(String.format("setblock %d %d %d %s",
+                            pos.getX(), pos.getY(), pos.getZ(), BlockEdits.toCommandString(state)));
                     }
                 }
             }
         }
 
-        mc.player.sendSystemMessage(
-            Component.literal("§a已选择 " + selectedBlocks.size() + " 个方块，可以使用 /exportbuilding <名称> 导出")
-        );
+        try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            writer.write("# CreatePlus building export\n");
+            writer.write(String.format("# size %dx%dx%d\n",
+                selection.width(), selection.height(), selection.depth()));
+            for (String line : lines) {
+                writer.write(line);
+                writer.write('\n');
+            }
+        }
+        return lines.size();
     }
 
-    public boolean hasSelection() {
-        return firstPos != null && secondPos != null && !selectedBlocks.isEmpty();
+    @Override
+    public String getDetailedDescription() {
+        Selection selection = Selection.shared();
+        return getTranslatedDescription()
+            + "\n§7/createplus export <名称> §8· §7/createplus import <名称>"
+            + "\n§7当前选区: §f" + (selection.isComplete() ? selection.describe() : "未选择")
+            + "\n§7文件位于 .minecraft/createplus/buildings/";
     }
-
-    public BlockPos getFirstPos() {
-        return firstPos;
-    }
-
-    public Map<BlockPos, BlockState> getSelectedBlocks() {
-        return selectedBlocks;
-    }
-
-} 
+}

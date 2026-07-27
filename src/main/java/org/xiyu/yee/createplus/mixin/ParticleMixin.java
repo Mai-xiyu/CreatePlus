@@ -12,11 +12,13 @@ import org.xiyu.yee.createplus.features.Performance;
 
 @Mixin(ParticleEngine.class)
 public class ParticleMixin {
+
     @Inject(method = "destroy", at = @At("HEAD"), cancellable = true)
-    private void onDestroyBlock(BlockPos p_107356_, BlockState p_107357_, CallbackInfo ci) {
-        Performance performance = (Performance) Createplus.FEATURE_MANAGER.getFeature("性能优化");
-        if (performance != null && performance.isEnabled() && performance.isDisableBlockBreakingParticles()) {
+    private void createplus$skipBreakParticles(BlockPos pos, BlockState state, CallbackInfo ci) {
+        Performance performance = Createplus.performance();
+        if (performance != null && performance.isEnabled()
+            && performance.isDisableBlockBreakingParticles()) {
             ci.cancel();
         }
     }
-} 
+}

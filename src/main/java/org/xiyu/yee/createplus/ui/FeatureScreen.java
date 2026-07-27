@@ -1,225 +1,467 @@
 package org.xiyu.yee.createplus.ui;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
 import org.xiyu.yee.createplus.Createplus;
 import org.xiyu.yee.createplus.features.CreativePlusFeature;
-import org.xiyu.yee.createplus.features.SubHUDFeature;
-import org.xiyu.yee.createplus.utils.KeyBindings;
+import org.xiyu.yee.createplus.settings.Setting;
+import org.xiyu.yee.createplus.settings.Slidable;
 import org.xiyu.yee.createplus.utils.RenderUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 屏幕角落的快捷菜单（默认 F9）。
+ *
+ * 三层结构：分类 → 功能 → 设置，全部用方向键操作，不需要打开鼠标界面，
+ * 因此可以边飞边调参数。
+ */
 public class FeatureScreen {
-    private static boolean visible = false;
-    private static float hudOpacity = 1.0f;
+    private static final FeatureScreen INSTANCE = new FeatureScreen();
 
-    // --- 布局配置 ---
-    private static final int MENU_X = 4;
-    private static final int MENU_Y = 4;
-    private static final int WIDTH = 120;
-    private static final int HEADER_H = 18;
-    private static final int LIST_MAX_H = 150; // 列表最大高度，防止太长
-    private static final int ITEM_H = 14;
-    private static final int DESC_BOX_H = 40;  // 底部描述框高度
-    private static final int PADDING = 2;      // 间距
+    private static final int X = 4;
+    private static final int Y = 4;
+    private static final int WIDTH = 152;
+    private static final int MAX_ROWS = 10;
+    private static final int DESC_MAX_LINES = 4;
+    /** 高亮条收敛速度（越大越跟手），按真实秒做指数插值，跟帧率脱钩。 */
+    private static final float HIGHLIGHT_SPEED = 18.0F;
 
-    // 颜色配置
-    private static final int COL_HEADER = 0xFF111111;
-    private static final int COL_BG = 0x90000000;
-    private static final int COL_ACCENT = 0xFF00A2FF; // CreatePlus 蓝
-    private static final int COL_TEXT_ON = 0xFFFFFFFF;
-    private static final int COL_TEXT_OFF = 0xFFAAAAAA;
+    private static float opacity = 0.95F;
 
-    private enum MenuState { MAIN, CATEGORY, SUB_SETTING }
-    private MenuState state = MenuState.MAIN;
+    private enum Level { CATEGORIES, FEATURES, SETTINGS }
 
-    private int selectedIndex = 0;
-    private String currentCategory = "";
+    private boolean visible;
+    private Level level = Level.CATEGORIES;
+    private CreativePlusFeature.Category category = CreativePlusFeature.Category.BUILDING;
+    private CreativePlusFeature feature;
 
-    private final List<String> categories = new ArrayList<>();
-    private final List<CreativePlusFeature> currentFeatures = new ArrayList<>();
-    private SubHUDFeature activeSubFeature = null;
+    private int selected;
+    private int scroll;
+    /** 高亮条的当前 Y 偏移，在 render 里按帧插值，避免 20 TPS 卡顿感。 */
+    private float highlight;
+    private float highlightTarget;
+    private long lastFrameNanos;
 
-    public FeatureScreen() {
-        categories.add("Building");
-        categories.add("Assist");
-        categories.add("Display");
-        categories.add("System");
+    /** 说明文字按 tick 刷新，别每帧拼 getDetailedDescription。 */
+    private boolean descDirty = true;
+    private String cachedDesc = "";
+
+    public static FeatureScreen get() {
+        return INSTANCE;
     }
 
-    public static float getOpacity() { return hudOpacity; }
-    public static void setOpacity(float value) { hudOpacity = Math.max(0.1f, Math.min(1.0f, value)); }
-    public static void toggleVisibility() { visible = !visible; }
+    public static float getOpacity() {
+        return opacity;
+    }
 
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        if (!visible) return;
+    public static void setOpacity(float value) {
+        opacity = Math.max(0.2F, Math.min(1.0F, value));
+    }
 
-        Minecraft mc = Minecraft.getInstance();
-        int currentY = MENU_Y;
+    public boolean isVisible() {
+        return visible;
+    }
 
-        // 1. 标题栏
-        RenderUtils.drawRect(graphics, MENU_X, currentY, WIDTH, HEADER_H, COL_HEADER);
-        RenderUtils.drawRect(graphics, MENU_X, currentY + HEADER_H - 1, WIDTH, 1, COL_ACCENT); // 蓝条装饰
-        graphics.drawString(mc.font, "CreatePlus", MENU_X + 4, currentY + 5, COL_ACCENT, false);
-
-        String subTitle = state == MenuState.MAIN ? "主菜单" : getCategoryNameCN(currentCategory);
-        graphics.drawString(mc.font, subTitle, MENU_X + WIDTH - mc.font.width(subTitle) - 4, currentY + 5, 0xFFAAAAAA, false);
-        currentY += HEADER_H;
-
-        // 2. 列表内容
-        int listSize = getListSize();
-        // 简单的滚动视图逻辑（这里简化为只显示前10个或者全部，为了代码简洁先全部显示，实际建议加 scroll）
-        int listDrawHeight = listSize * ITEM_H;
-
-        RenderUtils.drawRect(graphics, MENU_X, currentY, WIDTH, listDrawHeight, COL_BG);
-
-        for (int i = 0; i < listSize; i++) {
-            boolean isSelected = (i == selectedIndex);
-            int itemY = currentY + (i * ITEM_H);
-
-            if (isSelected) {
-                RenderUtils.drawRect(graphics, MENU_X, itemY, WIDTH, ITEM_H, COL_ACCENT);
-            }
-
-            String name = getItemName(i);
-            int textColor = isSelected ? 0xFFFFFFFF : 0xFFAAAAAA;
-            if (state == MenuState.CATEGORY) {
-                // 功能状态颜色
-                boolean enabled = currentFeatures.get(i).isEnabled();
-                textColor = enabled ? 0xFFFFFFFF : 0xFFAAAAAA;
-            }
-
-            graphics.drawString(mc.font, name, MENU_X + 4, itemY + 3, textColor, false);
-
-            // 右侧指示器
-            if (state == MenuState.MAIN) {
-                graphics.drawString(mc.font, ">", MENU_X + WIDTH - 10, itemY + 3, textColor, false);
-            } else {
-                CreativePlusFeature f = currentFeatures.get(i);
-                if (f instanceof SubHUDFeature) {
-                    graphics.drawString(mc.font, "+", MENU_X + WIDTH - 10, itemY + 3, 0xFFCCCCCC, false);
-                } else if (f.isEnabled()) {
-                    RenderUtils.drawRect(graphics, MENU_X + WIDTH - 4, itemY + 2, 2, ITEM_H - 4, 0xFF00FF00);
-                }
-            }
-        }
-        currentY += listDrawHeight;
-
-        // 3. 介绍框 (Description Box)
-        // 留一点间隙
-        currentY += PADDING;
-
-        RenderUtils.drawRect(graphics, MENU_X, currentY, WIDTH, DESC_BOX_H, COL_HEADER); // 深色背景
-        RenderUtils.drawRect(graphics, MENU_X, currentY, WIDTH, 1, COL_ACCENT); // 顶部分隔线
-
-        // 获取描述文本
-        String descText = "";
-        if (state == MenuState.MAIN) {
-            descText = "选择一个分类以查看功能列表。";
-        } else if (!currentFeatures.isEmpty()) {
-            descText = currentFeatures.get(selectedIndex).getTranslatedDescription();
-        }
-
-        // 简单的文本换行渲染 (支持 \n)
-        int textY = currentY + 4;
-        String[] lines = descText.split("\n"); // 支持lang文件里的 \n 换行
-        for (String line : lines) {
-            // 这里也可以加自动换行逻辑 (mc.font.split)
-            graphics.drawString(mc.font, line, MENU_X + 4, textY, 0xFFCCCCCC, false);
-            textY += 10;
-            if (textY > currentY + DESC_BOX_H) break; // 防止溢出
-        }
-
-        // 4. 子菜单渲染 (参数调整)
-        if (state == MenuState.SUB_SETTING && activeSubFeature != null) {
-            int subMenuX = MENU_X + WIDTH + PADDING;
-            int subMenuY = MENU_Y + HEADER_H + (selectedIndex * ITEM_H);
-            activeSubFeature.renderSubHUD(graphics, subMenuX, subMenuY);
+    public void toggleVisibility() {
+        visible = !visible;
+        if (visible) {
+            level = Level.CATEGORIES;
+            selected = 0;
+            scroll = 0;
+            highlight = 0.0F;
+            highlightTarget = 0.0F;
+            lastFrameNanos = 0L;
+            descDirty = true;
         }
     }
 
-    // ... 按键逻辑保持不变，只需复制上一轮的按键处理部分 ...
-    // 为了完整性，这里简写一下核心逻辑
-    private int getListSize() { return state == MenuState.MAIN ? categories.size() : currentFeatures.size(); }
-
-    private String getItemName(int index) {
-        return state == MenuState.MAIN ? getCategoryNameCN(categories.get(index)) : currentFeatures.get(index).getTranslatedName();
+    public void close() {
+        visible = false;
     }
 
-    private String getCategoryNameCN(String cat) {
-        return switch (cat) {
-            case "Building" -> "建筑功能";
-            case "Assist" -> "辅助功能";
-            case "Display" -> "显示功能";
-            case "System" -> "系统设置";
-            default -> cat;
+    // ==================================================================
+    // 数据
+    // ==================================================================
+
+    private List<CreativePlusFeature.Category> categories() {
+        List<CreativePlusFeature.Category> result = new ArrayList<>();
+        for (CreativePlusFeature.Category value : CreativePlusFeature.Category.values()) {
+            if (!Createplus.FEATURE_MANAGER.getByCategory(value).isEmpty()) result.add(value);
+        }
+        return result;
+    }
+
+    private List<CreativePlusFeature> features() {
+        return Createplus.FEATURE_MANAGER.getByCategory(category);
+    }
+
+    private List<Setting<?>> settings() {
+        return feature == null ? List.of() : feature.getSettings();
+    }
+
+    private int rowCount() {
+        return switch (level) {
+            case CATEGORIES -> categories().size();
+            case FEATURES -> features().size();
+            case SETTINGS -> settings().size();
         };
     }
 
-    // 更新列表逻辑 (保持上一轮的分类判断)
-    private void updateCurrentFeatures() {
-        currentFeatures.clear();
-        List<CreativePlusFeature> all = Createplus.FEATURE_MANAGER.getFeatures();
-        String cat = currentCategory;
-        for (CreativePlusFeature f : all) {
-            String id = f.getTranslationKey().toLowerCase();
-            boolean match = false;
-            if (cat.equals("Building") && (id.contains("area") || id.contains("build") || id.contains("place") || id.contains("scaffold") || id.contains("color") || id.contains("nucker"))) match = true;
-            else if (cat.equals("Assist") && (id.contains("fly") || id.contains("freecam") || id.contains("gamma") || id.contains("gibbon") || id.contains("speed") || id.contains("time") || id.contains("zoom") || id.contains("spin"))) match = true;
-            else if (cat.equals("Display") && (id.contains("hud") || id.contains("ping"))) match = true;
-            else if (cat.equals("System") && (id.contains("performance"))) match = true;
-            if (match) currentFeatures.add(f);
-        }
+    private int accentColor() {
+        return level == Level.CATEGORIES ? Theme.ACCENT : category.getColor();
     }
 
-    @SubscribeEvent
-    public void onKeyInput(InputEvent.Key event) {
-        if (event.getAction() != GLFW.GLFW_PRESS && event.getAction() != GLFW.GLFW_REPEAT) return;
-        if (KeyBindings.TOGGLE_HUD.consumeClick()) { toggleVisibility(); return; }
+    // ==================================================================
+    // 输入
+    // ==================================================================
+
+    public void handleKeyPress(int key) {
         if (!visible) return;
 
-        if (state == MenuState.SUB_SETTING && activeSubFeature != null) {
-            if (activeSubFeature.handleKeyPress(event.getKey())) return;
-            if (event.getKey() == GLFW.GLFW_KEY_LEFT || event.getKey() == GLFW.GLFW_KEY_BACKSPACE) {
-                state = MenuState.CATEGORY;
-                activeSubFeature.toggleSubHUD();
-                activeSubFeature = null;
-                return;
+        int count = rowCount();
+        switch (key) {
+            case GLFW.GLFW_KEY_UP -> move(-1, count);
+            case GLFW.GLFW_KEY_DOWN -> move(1, count);
+            case GLFW.GLFW_KEY_PAGE_UP -> move(-MAX_ROWS, count);
+            case GLFW.GLFW_KEY_PAGE_DOWN -> move(MAX_ROWS, count);
+            case GLFW.GLFW_KEY_HOME -> select(0, count);
+            case GLFW.GLFW_KEY_END -> select(count - 1, count);
+            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> activate();
+            case GLFW.GLFW_KEY_RIGHT -> {
+                switch (level) {
+                    case SETTINGS -> adjust(1);
+                    case FEATURES -> {
+                        List<CreativePlusFeature> list = features();
+                        if (!list.isEmpty()) openSettings(list.get(Math.min(selected, list.size() - 1)));
+                    }
+                    case CATEGORIES -> activate();
+                }
             }
-        }
-
-        switch (event.getKey()) {
-            case GLFW.GLFW_KEY_UP -> { selectedIndex--; if(selectedIndex < 0) selectedIndex = getListSize()-1; }
-            case GLFW.GLFW_KEY_DOWN -> { selectedIndex++; if(selectedIndex >= getListSize()) selectedIndex = 0; }
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER, GLFW.GLFW_KEY_RIGHT -> handleAction();
-            case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_BACKSPACE -> handleBack();
+            case GLFW.GLFW_KEY_LEFT -> {
+                if (level == Level.SETTINGS) {
+                    adjust(-1);
+                } else {
+                    back();
+                }
+            }
+            case GLFW.GLFW_KEY_BACKSPACE -> back();
+            case GLFW.GLFW_KEY_R -> resetSelected();
+            default -> {
+            }
         }
     }
 
-    private void handleAction() {
-        if (state == MenuState.MAIN) {
-            currentCategory = categories.get(selectedIndex);
-            updateCurrentFeatures();
-            if (!currentFeatures.isEmpty()) { state = MenuState.CATEGORY; selectedIndex = 0; }
+    /** @return true 表示滚轮被菜单消费 */
+    public boolean handleScroll(double delta) {
+        if (!visible) return false;
+        move(delta > 0 ? -1 : 1, rowCount());
+        return true;
+    }
+
+    private void move(int step, int count) {
+        if (count <= 0) return;
+        int next = selected + step;
+        if (next < 0) next = step == -1 ? count - 1 : 0;
+        if (next >= count) next = step == 1 ? 0 : count - 1;
+        select(next, count);
+    }
+
+    private void select(int index, int count) {
+        if (count <= 0) return;
+        selected = Math.max(0, Math.min(count - 1, index));
+        int visibleRows = Math.min(MAX_ROWS, count);
+        if (selected < scroll) scroll = selected;
+        if (selected >= scroll + visibleRows) scroll = selected - visibleRows + 1;
+        scroll = Math.max(0, Math.min(Math.max(0, count - visibleRows), scroll));
+        highlightTarget = (selected - scroll) * Theme.ROW_HEIGHT;
+        descDirty = true;
+    }
+
+    private void activate() {
+        switch (level) {
+            case CATEGORIES -> {
+                List<CreativePlusFeature.Category> list = categories();
+                if (list.isEmpty()) return;
+                category = list.get(Math.min(selected, list.size() - 1));
+                level = Level.FEATURES;
+                selected = 0;
+                scroll = 0;
+                highlight = 0.0F;
+                highlightTarget = 0.0F;
+                descDirty = true;
+            }
+            case FEATURES -> {
+                List<CreativePlusFeature> list = features();
+                if (list.isEmpty()) return;
+                Createplus.FEATURE_MANAGER.toggle(list.get(selected));
+                descDirty = true;
+            }
+            case SETTINGS -> adjust(1);
+        }
+    }
+
+    private void adjust(int direction) {
+        List<Setting<?>> list = settings();
+        if (list.isEmpty()) return;
+        list.get(Math.min(selected, list.size() - 1)).cycle(direction);
+        Createplus.FEATURE_MANAGER.saveConfig();
+        descDirty = true;
+    }
+
+    private void resetSelected() {
+        if (level == Level.SETTINGS) {
+            List<Setting<?>> list = settings();
+            if (list.isEmpty()) return;
+            list.get(Math.min(selected, list.size() - 1)).reset();
+        } else if (level == Level.FEATURES) {
+            List<CreativePlusFeature> list = features();
+            if (list.isEmpty()) return;
+            for (Setting<?> setting : list.get(selected).getSettings()) {
+                setting.reset();
+            }
         } else {
-            CreativePlusFeature f = currentFeatures.get(selectedIndex);
-            if (f instanceof SubHUDFeature) {
-                state = MenuState.SUB_SETTING;
-                activeSubFeature = (SubHUDFeature) f;
-                activeSubFeature.toggleSubHUD();
-            } else {
-                f.toggle();
+            return;
+        }
+        Createplus.FEATURE_MANAGER.saveConfig();
+        descDirty = true;
+    }
+
+    private void back() {
+        switch (level) {
+            case SETTINGS -> {
+                level = Level.FEATURES;
+                selected = Math.max(0, features().indexOf(feature));
+                scroll = 0;
+                feature = null;
+                highlight = 0.0F;
+                highlightTarget = selected * Theme.ROW_HEIGHT;
+                descDirty = true;
+            }
+            case FEATURES -> {
+                level = Level.CATEGORIES;
+                selected = Math.max(0, categories().indexOf(category));
+                scroll = 0;
+                highlight = 0.0F;
+                highlightTarget = selected * Theme.ROW_HEIGHT;
+                descDirty = true;
+            }
+            case CATEGORIES -> visible = false;
+        }
+    }
+
+    /** 在功能层按右键进入设置。由 {@link #handleKeyPress} 的 RIGHT 分支间接调用。 */
+    private void openSettings(CreativePlusFeature target) {
+        if (!target.hasSettings()) return;
+        feature = target;
+        level = Level.SETTINGS;
+        selected = 0;
+        scroll = 0;
+        highlight = 0.0F;
+        highlightTarget = 0.0F;
+        descDirty = true;
+    }
+
+    public void tick() {
+        // 说明文字跟着功能状态变（开关、预览方块数），按 tick 刷新就够
+        if (visible) descDirty = true;
+    }
+
+    /** 高亮条按真实时间插值，120 帧和 30 帧手感一致。 */
+    private void animateHighlight() {
+        long now = System.nanoTime();
+        float dt = lastFrameNanos == 0L ? 0.0F : (now - lastFrameNanos) / 1_000_000_000.0F;
+        lastFrameNanos = now;
+        // 切后台或卡顿时别一次飞过头
+        dt = Math.min(dt, 0.05F);
+
+        highlightTarget = (selected - scroll) * Theme.ROW_HEIGHT;
+        if (dt <= 0.0F) return;
+
+        float t = 1.0F - (float) Math.exp(-HIGHLIGHT_SPEED * dt);
+        highlight += (highlightTarget - highlight) * t;
+        if (Math.abs(highlightTarget - highlight) < 0.15F) highlight = highlightTarget;
+    }
+
+    // ==================================================================
+    // 渲染
+    // ==================================================================
+
+    public void render(GuiGraphics graphics, int screenWidth, int screenHeight, float partialTick) {
+        if (!visible || Createplus.FEATURE_MANAGER == null) return;
+
+        animateHighlight();
+
+        int accent = accentColor();
+        int count = rowCount();
+        int visibleRows = Math.max(1, Math.min(MAX_ROWS, count));
+        int listHeight = visibleRows * Theme.ROW_HEIGHT + 2;
+
+        int y = Y;
+        drawHeader(graphics, y, accent);
+        y += Theme.HEADER_HEIGHT;
+
+        RenderUtils.drawRect(graphics, X, y, WIDTH, listHeight, alpha(Theme.PANEL));
+        drawRows(graphics, y + 1, visibleRows, count, accent);
+        drawScrollbar(graphics, y + 1, listHeight - 2, visibleRows, count, accent);
+        y += listHeight;
+
+        drawDescription(graphics, y + 2, accent);
+    }
+
+    private void drawHeader(GuiGraphics graphics, int y, int accent) {
+        RenderUtils.drawRoundedRect(graphics, X, y, WIDTH, Theme.HEADER_HEIGHT,
+            Theme.CORNER, alpha(Theme.PANEL_HEADER));
+        RenderUtils.drawRect(graphics, X, y + Theme.HEADER_HEIGHT - 1, WIDTH, 1, alpha(accent));
+
+        RenderUtils.drawText(graphics, "CreatePlus", X + 5, y + 6, alpha(accent), false);
+
+        String crumb = switch (level) {
+            case CATEGORIES -> "分类";
+            case FEATURES -> category.getDisplayName();
+            case SETTINGS -> feature == null ? "" : feature.getTranslatedName();
+        };
+        RenderUtils.drawClippedText(graphics, crumb, X + 62, y + 6, WIDTH - 68,
+            alpha(Theme.TEXT_MUTED), false);
+    }
+
+    private void drawRows(GuiGraphics graphics, int top, int visibleRows, int count, int accent) {
+        if (count == 0) {
+            RenderUtils.drawText(graphics, "（没有可用项目）", X + 6, top + 3,
+                alpha(Theme.TEXT_DISABLED), false);
+            return;
+        }
+
+        RenderUtils.beginClip(graphics, X, top, WIDTH, visibleRows * Theme.ROW_HEIGHT);
+
+        // 先画高亮条，再画文字，这样选中行的文字不会被盖住
+        int highlightY = top + Math.round(highlight);
+        RenderUtils.drawRect(graphics, X, highlightY, WIDTH, Theme.ROW_HEIGHT,
+            RenderUtils.setAlpha(accent, (int) (110 * opacity)));
+        RenderUtils.drawRect(graphics, X, highlightY, 2, Theme.ROW_HEIGHT, alpha(accent));
+
+        for (int i = 0; i < visibleRows; i++) {
+            int index = scroll + i;
+            if (index >= count) break;
+            drawRow(graphics, index, top + i * Theme.ROW_HEIGHT, index == selected, accent);
+        }
+
+        RenderUtils.endClip(graphics);
+    }
+
+    private void drawRow(GuiGraphics graphics, int index, int rowY, boolean isSelected, int accent) {
+        int textY = rowY + 3;
+        int textX = X + 6;
+
+        switch (level) {
+            case CATEGORIES -> {
+                CreativePlusFeature.Category cat = categories().get(index);
+                int enabled = 0;
+                List<CreativePlusFeature> list = Createplus.FEATURE_MANAGER.getByCategory(cat);
+                for (CreativePlusFeature f : list) {
+                    if (f.isEnabled()) enabled++;
+                }
+                RenderUtils.drawRect(graphics, X + 3, rowY + 4, 2, 6, alpha(cat.getColor()));
+                RenderUtils.drawClippedText(graphics, cat.getDisplayName(), textX + 2, textY,
+                    WIDTH - 50, alpha(isSelected ? Theme.TEXT : Theme.TEXT_MUTED), false);
+                RenderUtils.drawRightAlignedText(graphics, enabled + "/" + list.size(),
+                    X + WIDTH - 14, textY, alpha(enabled > 0 ? Theme.ON : Theme.TEXT_DISABLED), false);
+                RenderUtils.drawText(graphics, ">", X + WIDTH - 9, textY, alpha(Theme.TEXT_MUTED), false);
+            }
+            case FEATURES -> {
+                CreativePlusFeature f = features().get(index);
+                boolean on = f.isEnabled();
+                RenderUtils.drawClippedText(graphics, f.getTranslatedName(), textX, textY,
+                    WIDTH - 40, alpha(on ? Theme.TEXT : Theme.TEXT_MUTED), false);
+                if (f.hasSettings()) {
+                    RenderUtils.drawText(graphics, "»", X + WIDTH - 22, textY,
+                        alpha(isSelected ? Theme.TEXT : Theme.TEXT_DISABLED), false);
+                }
+                RenderUtils.drawToggleDot(graphics, X + WIDTH - 13, rowY + 4, 6, on,
+                    alpha(Theme.ON), alpha(Theme.OFF));
+            }
+            case SETTINGS -> {
+                Setting<?> setting = settings().get(index);
+                RenderUtils.drawClippedText(graphics, setting.getDisplayName(), textX, textY,
+                    WIDTH - 70, alpha(isSelected ? Theme.TEXT : Theme.TEXT_MUTED), false);
+                RenderUtils.drawRightAlignedText(graphics, setting.getDisplayValue(),
+                    X + WIDTH - 6, textY, alpha(isSelected ? accent : Theme.TEXT_MUTED), false);
+
+                if (setting instanceof Slidable slidable) {
+                    RenderUtils.drawRect(graphics, X + 6, rowY + Theme.ROW_HEIGHT - 2,
+                        WIDTH - 12, 1, alpha(Theme.OFF));
+                    int filled = (int) Math.round((WIDTH - 12) * slidable.getFraction());
+                    RenderUtils.drawRect(graphics, X + 6, rowY + Theme.ROW_HEIGHT - 2,
+                        filled, 1, alpha(accent));
+                }
             }
         }
     }
 
-    private void handleBack() {
-        if (state == MenuState.CATEGORY) { state = MenuState.MAIN; selectedIndex = 0; }
-        else if (state == MenuState.MAIN) visible = false;
+    private void drawScrollbar(GuiGraphics graphics, int top, int height,
+                               int visibleRows, int count, int accent) {
+        if (count <= visibleRows) return;
+
+        int trackX = X + WIDTH - 2;
+        RenderUtils.drawRect(graphics, trackX, top, 2, height, alpha(Theme.SCROLLBAR));
+
+        int thumbHeight = Math.max(6, height * visibleRows / count);
+        int maxScroll = count - visibleRows;
+        int thumbY = top + (height - thumbHeight) * scroll / Math.max(1, maxScroll);
+        RenderUtils.drawRect(graphics, trackX, thumbY, 2, thumbHeight, alpha(accent));
+    }
+
+    private void drawDescription(GuiGraphics graphics, int top, int accent) {
+        String text = describeSelection();
+        String hint = hintLine();
+
+        int lines = Math.min(DESC_MAX_LINES, RenderUtils.countWrappedLines(text, WIDTH - 10));
+        int boxHeight = lines * 9 + 14;
+
+        RenderUtils.drawRoundedRect(graphics, X, top, WIDTH, boxHeight, Theme.CORNER,
+            alpha(Theme.PANEL_HEADER));
+        RenderUtils.drawRect(graphics, X, top, WIDTH, 1, alpha(accent));
+
+        RenderUtils.drawWrappedText(graphics, text, X + 5, top + 4,
+            WIDTH - 10, 9, DESC_MAX_LINES, alpha(Theme.TEXT_MUTED));
+        RenderUtils.drawText(graphics, hint, X + 5, top + boxHeight - 9,
+            alpha(Theme.TEXT_DISABLED), false);
+    }
+
+    private String describeSelection() {
+        if (!descDirty) return cachedDesc;
+        descDirty = false;
+
+        int count = rowCount();
+        if (count == 0) {
+            cachedDesc = "这个分类下暂时没有功能。";
+            return cachedDesc;
+        }
+
+        cachedDesc = switch (level) {
+            case CATEGORIES -> "共 " + Createplus.FEATURE_MANAGER.getByCategory(
+                categories().get(Math.min(selected, count - 1))).size() + " 个功能，回车进入。";
+            case FEATURES -> features().get(Math.min(selected, count - 1)).getDetailedDescription();
+            case SETTINGS -> {
+                Setting<?> setting = settings().get(Math.min(selected, count - 1));
+                String tooltip = setting.getTooltip();
+                yield tooltip != null ? tooltip
+                    : setting.getDisplayName() + "：当前 " + setting.getDisplayValue();
+            }
+        };
+        return cachedDesc;
+    }
+
+    private String hintLine() {
+        return switch (level) {
+            case CATEGORIES -> "↑↓ 选择   → 进入   ⌫ 关闭";
+            case FEATURES -> "⏎ 开关   → 设置   R 重置   ⌫ 返回";
+            case SETTINGS -> "←→ 调整   R 重置   ⌫ 返回";
+        };
+    }
+
+    private static int alpha(int color) {
+        return RenderUtils.withAlpha(color, opacity);
     }
 }

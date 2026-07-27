@@ -3,275 +3,470 @@ package org.xiyu.yee.createplus.ui.clickgui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 import org.xiyu.yee.createplus.Createplus;
 import org.xiyu.yee.createplus.features.CreativePlusFeature;
-import org.xiyu.yee.createplus.features.SubHUDFeature;
-import org.xiyu.yee.createplus.ui.FeatureScreen;
-import org.xiyu.yee.createplus.utils.ConfigManager;
+import org.xiyu.yee.createplus.settings.Setting;
+import org.xiyu.yee.createplus.settings.Slidable;
+import org.xiyu.yee.createplus.ui.Theme;
 import org.xiyu.yee.createplus.utils.RenderUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 鼠标操作的功能面板（默认右 Shift）。
+ *
+ * 每个分类一个可拖动面板，左键开关功能，右键展开该功能的设置。
+ * 顶部有搜索框，功能一多就靠它定位。
+ */
 public class ClickGuiScreen extends Screen {
 
+    private static final int PANEL_WIDTH = 132;
+    private static final int ROW = 15;
+
+    /** 每帧重建的可点击区域。渲染时算好布局，点击时直接复用，避免两套坐标算法对不上。 */
+    private final List<Hit> hits = new ArrayList<>();
     private final List<Panel> panels = new ArrayList<>();
 
-    // 当前正在调整设置的功能（右键触发）
-    private SubHUDFeature activeSettingFeature = null;
-    private int settingX, settingY;
+    private Panel draggingPanel;
+    private double dragOffsetX;
+    private double dragOffsetY;
+
+    private Hit draggingSlider;
+    private String search = "";
+    private boolean searchFocused;
 
     public ClickGuiScreen() {
-        super(Component.literal("ClickGUI"));
-        initPanels();
-    }
-
-    private void initPanels() {
-        double x = 20;
-        double y = 20;
-        double width = 110;
-
-        // 创建分类面板 (中文标题)
-        Panel buildPanel = new Panel("建筑功能", x, y, width);
-        Panel assistPanel = new Panel("辅助功能", x + 120, y, width);
-        Panel displayPanel = new Panel("显示功能", x + 240, y, width);
-        Panel systemPanel = new Panel("系统设置", x + 360, y, width);
-
-        // 填充功能 (使用同样的分类逻辑)
-        for (CreativePlusFeature f : Createplus.FEATURE_MANAGER.getFeatures()) {
-            String id = f.getTranslationKey().toLowerCase();
-            if (id.contains("area") || id.contains("build") || id.contains("place") || id.contains("scaffold") || id.contains("color") || id.contains("nucker")) {
-                buildPanel.addButton(new ModuleButton(f, buildPanel));
-            } else if (id.contains("fly") || id.contains("freecam") || id.contains("gamma") || id.contains("gibbon") || id.contains("speed") || id.contains("time") || id.contains("zoom") || id.contains("spin")) {
-                assistPanel.addButton(new ModuleButton(f, assistPanel));
-            } else if (id.contains("hud") || id.contains("ping")) {
-                displayPanel.addButton(new ModuleButton(f, displayPanel));
-            } else {
-                // 其他归为系统
-                systemPanel.addButton(new ModuleButton(f, systemPanel));
-            }
-        }
-
-        panels.add(buildPanel);
-        panels.add(assistPanel);
-        panels.add(displayPanel);
-        panels.add(systemPanel);
-
-        // 设置面板 (透明度)
-        Panel settingsPanel = new Panel("全局设置", x + 480, y, width);
-        settingsPanel.addButton(new OpacitySlider(settingsPanel));
-        panels.add(settingsPanel);
+        super(Component.literal("CreatePlus"));
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        this.renderBackground(graphics);
+    protected void init() {
+        if (!panels.isEmpty()) return;
 
-        // 渲染面板
-        for (Panel panel : panels) {
-            panel.render(graphics, mouseX, mouseY, partialTicks);
-        }
-
-        // 渲染 Tooltip (描述)
-        for (Panel panel : panels) {
-            if (panel.isExpanded) {
-                for (ModuleButton btn : panel.buttons) {
-                    if (btn.isHovered(mouseX, mouseY) && btn.feature != null) {
-                        String desc = btn.feature.getTranslatedDescription();
-                        if (desc != null && !desc.isEmpty()) {
-                            // 在鼠标旁边渲染描述框
-                            int boxW = font.width(desc) + 10;
-                            int boxH = 16;
-                            RenderUtils.drawRect(graphics, mouseX + 10, mouseY, boxW, boxH, 0xCC000000);
-                            graphics.drawString(font, desc, mouseX + 15, mouseY + 4, 0xFFFFFFFF, false);
-                        }
-                    }
-                }
+        int x = 12;
+        int y = 34;
+        for (CreativePlusFeature.Category category : CreativePlusFeature.Category.values()) {
+            List<CreativePlusFeature> features = Createplus.FEATURE_MANAGER.getByCategory(category);
+            if (features.isEmpty()) continue;
+            panels.add(new Panel(category, features, x, y));
+            x += PANEL_WIDTH + 8;
+            if (x + PANEL_WIDTH > this.width - 12) {
+                x = 12;
+                y += 190;
             }
         }
+    }
 
-        // 渲染子功能设置窗口 (如果激活)
-        if (activeSettingFeature != null) {
-            activeSettingFeature.renderSubHUD(graphics, settingX, settingY);
+    // ==================================================================
+    // 渲染
+    // ==================================================================
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(graphics);
+        hits.clear();
+
+        drawTopBar(graphics, mouseX, mouseY);
+
+        for (Panel panel : panels) {
+            panel.render(graphics, mouseX, mouseY);
         }
 
-        super.render(graphics, mouseX, mouseY, partialTicks);
+        super.render(graphics, mouseX, mouseY, partialTick);
+        drawTooltip(graphics, mouseX, mouseY);
     }
+
+    private void drawTopBar(GuiGraphics graphics, int mouseX, int mouseY) {
+        RenderUtils.drawRect(graphics, 0, 0, this.width, 26, 0xE6101319);
+        RenderUtils.drawRect(graphics, 0, 26, this.width, 1, Theme.ACCENT);
+        RenderUtils.drawText(graphics, "CreatePlus", 12, 9, Theme.ACCENT, false);
+
+        int boxX = 92;
+        int boxWidth = 150;
+        RenderUtils.drawRoundedRect(graphics, boxX, 5, boxWidth, 16, Theme.CORNER,
+            searchFocused ? 0xFF20262F : 0xFF181D25);
+        RenderUtils.drawBorder(graphics, boxX, 5, boxWidth, 16, 1,
+            searchFocused ? Theme.ACCENT : Theme.OFF);
+        String shown = search.isEmpty() && !searchFocused ? "搜索功能…" : search;
+        RenderUtils.drawClippedText(graphics, shown + (searchFocused ? "_" : ""),
+            boxX + 4, 9, boxWidth - 8,
+            search.isEmpty() && !searchFocused ? Theme.TEXT_DISABLED : Theme.TEXT, false);
+        hits.add(Hit.searchBox(boxX, 5, boxWidth, 16));
+
+        // HUD 透明度已挪到「信息面板」设置；顶栏只保留重置
+        int resetW = 62;
+        int resetX = this.width - 12 - resetW;
+        boolean hovered = mouseX >= resetX && mouseX <= resetX + resetW && mouseY >= 5 && mouseY <= 21;
+        RenderUtils.drawRoundedRect(graphics, resetX, 5, resetW, 16, Theme.CORNER,
+            hovered ? Theme.DANGER : 0xFF262C36);
+        RenderUtils.drawCenteredText(graphics, "全部重置", resetX + resetW / 2, 9, Theme.TEXT);
+        hits.add(Hit.button(resetX, 5, resetW, 16, button -> resetAll(), "把所有功能的设置恢复默认值"));
+    }
+
+    private void drawTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+        for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit hit = hits.get(i);
+            if (hit.tooltip == null || !hit.contains(mouseX, mouseY)) continue;
+
+            int width = Math.min(200, this.font.width(hit.tooltip) + 8);
+            int lines = RenderUtils.countWrappedLines(hit.tooltip, width - 8);
+            int height = lines * 10 + 6;
+            int x = Math.min(mouseX + 10, this.width - width - 4);
+            int y = Math.min(mouseY + 8, this.height - height - 4);
+
+            RenderUtils.drawRoundedRect(graphics, x, y, width, height, Theme.CORNER, 0xF01A1F28);
+            RenderUtils.drawBorder(graphics, x, y, width, height, 1, Theme.ACCENT_DIM);
+            RenderUtils.drawWrappedText(graphics, hit.tooltip, x + 4, y + 3,
+                width - 8, 10, lines, Theme.TEXT);
+            return;
+        }
+    }
+
+    // ==================================================================
+    // 输入
+    // ==================================================================
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 如果点击了设置窗口区域之外，关闭设置
-        if (activeSettingFeature != null) {
-            // 这里应该判断点击区域，简化起见，点击空白处关闭
-            // activeSettingFeature = null;
-            // 暂时不关，让 Panel 逻辑去处理
-        }
+        for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit hit = hits.get(i);
+            if (!hit.contains(mouseX, mouseY)) continue;
 
-        for (int i = panels.size() - 1; i >= 0; i--) {
-            if (panels.get(i).mouseClicked(mouseX, mouseY, button)) {
-                Panel p = panels.remove(i);
-                panels.add(p);
+            searchFocused = hit.isSearchBox;
+            if (hit.isSearchBox) return true;
+
+            if (hit.panel != null) {
+                if (button == 1) {
+                    hit.panel.expanded = !hit.panel.expanded;
+                } else if (button == 0) {
+                    draggingPanel = hit.panel;
+                    dragOffsetX = mouseX - hit.panel.x;
+                    dragOffsetY = mouseY - hit.panel.y;
+                }
+                bringToFront(hit.panel);
+                return true;
+            }
+
+            if (hit.slider != null && button == 0) {
+                draggingSlider = hit;
+                applySlider(hit, mouseX);
+                return true;
+            }
+
+            if (hit.action != null) {
+                hit.action.accept(button);
+                Createplus.FEATURE_MANAGER.saveConfig();
                 return true;
             }
         }
 
-        // 点击空白处关闭子设置
-        if (button == 0) {
-            activeSettingFeature = null;
-        }
-
+        searchFocused = false;
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        for (Panel panel : panels) panel.mouseReleased(mouseX, mouseY, button);
+        if (draggingPanel != null || draggingSlider != null) {
+            draggingPanel = null;
+            draggingSlider = null;
+            Createplus.FEATURE_MANAGER.saveConfig();
+            return true;
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        for (Panel panel : panels) {
-            if (panel.isDragging) {
-                panel.x += dragX;
-                panel.y += dragY;
-            }
+        if (draggingPanel != null) {
+            draggingPanel.x = (int) (mouseX - dragOffsetX);
+            draggingPanel.y = (int) (mouseY - dragOffsetY);
+            return true;
+        }
+        if (draggingSlider != null) {
+            applySlider(draggingSlider, mouseX);
+            return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
-    // === 内部类 ===
-
-    public class Panel {
-        public String categoryName;
-        public double x, y, width;
-        public boolean isExpanded = true;
-        public boolean isDragging = false;
-        public List<ModuleButton> buttons = new ArrayList<>();
-
-        public Panel(String name, double x, double y, double w) {
-            this.categoryName = name;
-            this.x = x; this.y = y; this.width = w;
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit hit = hits.get(i);
+            if (hit.slider == null || !hit.contains(mouseX, mouseY)) continue;
+            hit.slider.cycle(delta > 0 ? 1 : -1);
+            Createplus.FEATURE_MANAGER.saveConfig();
+            return true;
         }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
 
-        public void addButton(ModuleButton btn) { buttons.add(btn); }
-
-        public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-            int dx = (int)x; int dy = (int)y; int dw = (int)width;
-            RenderUtils.drawRect(graphics, dx, dy, dw, 20, 0xFF00A2FF);
-            RenderUtils.drawCenteredText(graphics, categoryName, dx + dw/2, dy + 6, 0xFFFFFFFF);
-
-            if (isExpanded) {
-                int h = buttons.size() * 18;
-                RenderUtils.drawRect(graphics, dx, dy + 20, dw, h + 2, 0xCC000000);
-                int by = dy + 20;
-                for (ModuleButton btn : buttons) {
-                    btn.render(graphics, dx, by, dw, 18, mouseX, mouseY);
-                    by += 18;
-                }
-            }
+    @Override
+    public boolean charTyped(char character, int modifiers) {
+        if (searchFocused && character >= ' ') {
+            search += character;
+            return true;
         }
+        return super.charTyped(character, modifiers);
+    }
 
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 20) {
-                if (button == 1) isExpanded = !isExpanded;
-                else if (button == 0) isDragging = true;
+    @Override
+    public boolean keyPressed(int key, int scanCode, int modifiers) {
+        if (searchFocused) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!search.isEmpty()) search = search.substring(0, search.length() - 1);
                 return true;
             }
-            if (isExpanded) {
-                double by = y + 20;
-                for (ModuleButton btn : buttons) {
-                    if (mouseX >= x && mouseX <= x + width && mouseY >= by && mouseY <= by + 18) {
-                        btn.mouseClicked(button, mouseX, mouseY);
-                        return true;
-                    }
-                    by += 18;
-                }
+            if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_ENTER) {
+                searchFocused = false;
+                return true;
             }
-            return false;
         }
+        return super.keyPressed(key, scanCode, modifiers);
+    }
 
-        public void mouseReleased(double mouseX, double mouseY, int button) {
-            isDragging = false;
-            if (isExpanded) for (ModuleButton btn : buttons) btn.mouseReleased();
+    @Override
+    public void onClose() {
+        Createplus.FEATURE_MANAGER.saveConfig();
+        super.onClose();
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    private void applySlider(Hit hit, double mouseX) {
+        double fraction = (mouseX - hit.x) / hit.w;
+        if (hit.slider instanceof Slidable slidable) {
+            slidable.setFraction(fraction);
         }
     }
 
-    public class ModuleButton {
-        protected CreativePlusFeature feature;
-        protected Panel parent;
+    private void bringToFront(Panel panel) {
+        panels.remove(panel);
+        panels.add(panel);
+    }
 
-        public ModuleButton(CreativePlusFeature feature, Panel parent) {
-            this.feature = feature; this.parent = parent;
+    private void resetAll() {
+        for (CreativePlusFeature feature : Createplus.FEATURE_MANAGER.getFeatures()) {
+            for (Setting<?> setting : feature.getSettings()) {
+                setting.reset();
+            }
+        }
+        Createplus.FEATURE_MANAGER.saveConfig();
+    }
+
+    private boolean matchesSearch(CreativePlusFeature feature) {
+        if (search.isEmpty()) return true;
+        String needle = search.toLowerCase();
+        return feature.getName().toLowerCase().contains(needle)
+            || feature.getTranslatedName().toLowerCase().contains(needle);
+    }
+
+    // ==================================================================
+    // 面板
+    // ==================================================================
+
+    private final class Panel {
+        private final CreativePlusFeature.Category category;
+        private final List<CreativePlusFeature> features;
+        private final List<CreativePlusFeature> expandedFeatures = new ArrayList<>();
+        private int x;
+        private int y;
+        private boolean expanded = true;
+
+        private Panel(CreativePlusFeature.Category category, List<CreativePlusFeature> features,
+                      int x, int y) {
+            this.category = category;
+            this.features = features;
+            this.x = x;
+            this.y = y;
         }
 
-        public boolean isHovered(int mouseX, int mouseY) {
-            // 需要在 render 时更新坐标或者在这里重新计算，简化起见假设 render 每帧都调
-            return false; // 实际 Tooltip 逻辑在 Panel 循环里写了
-        }
+        private void render(GuiGraphics graphics, int mouseX, int mouseY) {
+            int color = category.getColor();
 
-        public void render(GuiGraphics graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-            if (feature == null) return;
-            boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+            RenderUtils.drawRoundedRect(graphics, x, y, PANEL_WIDTH, 18, Theme.CORNER, 0xF01B2130);
+            RenderUtils.drawRect(graphics, x, y + 17, PANEL_WIDTH, 1, color);
+            RenderUtils.drawText(graphics, category.getDisplayName(), x + 6, y + 5, color, false);
+            RenderUtils.drawRightAlignedText(graphics, expanded ? "−" : "+",
+                x + PANEL_WIDTH - 6, y + 5, Theme.TEXT_MUTED, false);
+            hits.add(Hit.panel(x, y, PANEL_WIDTH, 18, this));
 
-            int color = feature.isEnabled() ? 0xFF00A2FF : 0x00000000;
-            if (hovered) color = feature.isEnabled() ? 0xFF33B5FF : 0x33FFFFFF;
+            if (!expanded) return;
 
-            RenderUtils.drawRect(graphics, x + 1, y, w - 2, h, color);
+            int rowY = y + 18;
+            int bodyStart = rowY;
+            List<CreativePlusFeature> shown = new ArrayList<>();
+            for (CreativePlusFeature feature : features) {
+                if (matchesSearch(feature)) shown.add(feature);
+            }
 
-            // 使用中文名
-            String name = feature.getTranslatedName();
-            int textColor = feature.isEnabled() ? 0xFFFFFFFF : 0xFFAAAAAA;
-            RenderUtils.drawText(graphics, name, x + 5, y + 5, textColor, false);
+            int bodyHeight = 2;
+            for (CreativePlusFeature feature : shown) {
+                bodyHeight += ROW;
+                if (expandedFeatures.contains(feature)) {
+                    bodyHeight += feature.getSettings().size() * ROW;
+                }
+            }
+            RenderUtils.drawRect(graphics, x, bodyStart, PANEL_WIDTH, bodyHeight, 0xE6141821);
+            rowY += 1;
 
-            if (feature instanceof SubHUDFeature) {
-                RenderUtils.drawText(graphics, "+", x + w - 10, y + 5, 0xFFAAAAAA, false);
+            for (CreativePlusFeature feature : shown) {
+                rowY = drawFeatureRow(graphics, feature, rowY, mouseX, mouseY, color);
             }
         }
 
-        public boolean isHovered(double mouseX, double mouseY, int x, int y, int w, int h) {
+        private int drawFeatureRow(GuiGraphics graphics, CreativePlusFeature feature, int rowY,
+                                   int mouseX, int mouseY, int color) {
+            boolean hovered = mouseX >= x && mouseX <= x + PANEL_WIDTH
+                && mouseY >= rowY && mouseY <= rowY + ROW;
+            boolean on = feature.isEnabled();
+
+            if (on) {
+                RenderUtils.drawRect(graphics, x, rowY, PANEL_WIDTH, ROW,
+                    RenderUtils.setAlpha(color, hovered ? 90 : 60));
+                RenderUtils.drawRect(graphics, x, rowY, 2, ROW, color);
+            } else if (hovered) {
+                RenderUtils.drawRect(graphics, x, rowY, PANEL_WIDTH, ROW, Theme.PANEL_ALT);
+            }
+
+            RenderUtils.drawClippedText(graphics, feature.getTranslatedName(), x + 6, rowY + 4,
+                PANEL_WIDTH - 34, on ? Theme.TEXT : Theme.TEXT_MUTED, false);
+
+            boolean open = expandedFeatures.contains(feature);
+            if (feature.hasSettings()) {
+                RenderUtils.drawText(graphics, open ? "▾" : "▸", x + PANEL_WIDTH - 22, rowY + 4,
+                    Theme.TEXT_MUTED, false);
+            }
+            RenderUtils.drawToggleDot(graphics, x + PANEL_WIDTH - 13, rowY + 4, 7, on,
+                Theme.ON, Theme.OFF);
+
+            hits.add(Hit.button(x, rowY, PANEL_WIDTH, ROW, button -> {
+                if (button == 0) {
+                    Createplus.FEATURE_MANAGER.toggle(feature);
+                } else if (button == 1 && feature.hasSettings()) {
+                    if (!expandedFeatures.remove(feature)) expandedFeatures.add(feature);
+                }
+            }, feature.getDetailedDescription()));
+
+            rowY += ROW;
+            if (!open) return rowY;
+
+            for (Setting<?> setting : feature.getSettings()) {
+                drawSettingRow(graphics, setting, rowY, mouseX, mouseY, color);
+                rowY += ROW;
+            }
+            return rowY;
+        }
+
+        private void drawSettingRow(GuiGraphics graphics, Setting<?> setting, int rowY,
+                                    int mouseX, int mouseY, int color) {
+            boolean hovered = mouseX >= x && mouseX <= x + PANEL_WIDTH
+                && mouseY >= rowY && mouseY <= rowY + ROW;
+            if (hovered) {
+                RenderUtils.drawRect(graphics, x + 6, rowY, PANEL_WIDTH - 6, ROW, Theme.PANEL_ALT);
+            }
+
+            RenderUtils.drawClippedText(graphics, setting.getDisplayName(), x + 12, rowY + 4,
+                PANEL_WIDTH - 62, Theme.TEXT_MUTED, false);
+            RenderUtils.drawRightAlignedText(graphics, setting.getDisplayValue(),
+                x + PANEL_WIDTH - 6, rowY + 4, color, false);
+
+            if (setting instanceof Slidable slidable) {
+                int barX = x + 12;
+                int barWidth = PANEL_WIDTH - 24;
+                RenderUtils.drawRect(graphics, barX, rowY + ROW - 3, barWidth, 2, Theme.OFF);
+                RenderUtils.drawRect(graphics, barX, rowY + ROW - 3,
+                    (int) Math.round(barWidth * slidable.getFraction()), 2, color);
+                hits.add(Hit.slider(barX, rowY, barWidth, ROW, setting, setting.getTooltip()));
+            } else {
+                hits.add(Hit.button(x + 6, rowY, PANEL_WIDTH - 6, ROW, button -> {
+                    if (setting instanceof org.xiyu.yee.createplus.settings.StringSetting stringSetting) {
+                        minecraft.setScreen(new org.xiyu.yee.createplus.ui.StringEditScreen(
+                            ClickGuiScreen.this, stringSetting));
+                    } else {
+                        setting.cycle(button == 1 ? -1 : 1);
+                    }
+                }, setting.getTooltip()));
+            }
+        }
+    }
+
+    // ==================================================================
+    // 命中区域
+    // ==================================================================
+
+    private static final class Hit {
+        private int x;
+        private int y;
+        private int w;
+        private int h;
+        private java.util.function.IntConsumer action;
+        private Setting<?> slider;
+        private Panel panel;
+        private String tooltip;
+        private boolean isOpacity;
+        private boolean isSearchBox;
+
+        private boolean contains(double mouseX, double mouseY) {
             return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
         }
 
-        public void mouseClicked(int button, double mouseX, double mouseY) {
-            if (feature == null) return;
-            if (button == 0) {
-                feature.toggle();
-            } else if (button == 1) {
-                // 右键点击，如果支持子设置，则激活
-                if (feature instanceof SubHUDFeature) {
-                    activeSettingFeature = (SubHUDFeature) feature;
-                    // 设置面板显示在鼠标位置
-                    settingX = (int)mouseX + 10;
-                    settingY = (int)mouseY;
-                }
-            }
+        private static Hit button(int x, int y, int w, int h,
+                                  java.util.function.IntConsumer action, String tooltip) {
+            Hit hit = new Hit();
+            hit.x = x;
+            hit.y = y;
+            hit.w = w;
+            hit.h = h;
+            hit.action = action;
+            hit.tooltip = tooltip;
+            return hit;
         }
-        public void mouseReleased() {}
-    }
 
-    public class OpacitySlider extends ModuleButton {
-        private boolean dragging = false;
-        public OpacitySlider(Panel parent) { super(null, parent); }
-        @Override
-        public void render(GuiGraphics graphics, int x, int y, int w, int h, int mouseX, int mouseY) {
-            if (dragging) {
-                float val = (float)(mouseX - x) / w;
-                FeatureScreen.setOpacity(val);
-            }
-            RenderUtils.drawRect(graphics, x + 1, y, w - 2, h, 0x88000000);
-            int barWidth = (int) ((w - 2) * FeatureScreen.getOpacity());
-            RenderUtils.drawRect(graphics, x + 1, y, barWidth, h, 0xFF00A2FF);
-            String text = String.format("透明度: %.0f%%", FeatureScreen.getOpacity() * 100);
-            RenderUtils.drawText(graphics, text, x + 5, y + 5, 0xFFFFFFFF, true);
+        private static Hit slider(int x, int y, int w, int h, Setting<?> setting, String tooltip) {
+            Hit hit = new Hit();
+            hit.x = x;
+            hit.y = y;
+            hit.w = w;
+            hit.h = h;
+            hit.slider = setting;
+            hit.tooltip = tooltip;
+            return hit;
         }
-        @Override
-        public void mouseClicked(int button, double mouseX, double mouseY) {
-            if (button == 0) dragging = true;
+
+        private static Hit panel(int x, int y, int w, int h, Panel panel) {
+            Hit hit = new Hit();
+            hit.x = x;
+            hit.y = y;
+            hit.w = w;
+            hit.h = h;
+            hit.panel = panel;
+            return hit;
         }
-        @Override
-        public void mouseReleased() {
-            if (dragging) { dragging = false; ConfigManager.saveConfig(); }
+
+        private static Hit opacity(int x, int y, int w, int h) {
+            Hit hit = new Hit();
+            hit.x = x;
+            hit.y = y;
+            hit.w = w;
+            hit.h = h;
+            hit.isOpacity = true;
+            return hit;
+        }
+
+        private static Hit searchBox(int x, int y, int w, int h) {
+            Hit hit = new Hit();
+            hit.x = x;
+            hit.y = y;
+            hit.w = w;
+            hit.h = h;
+            hit.isSearchBox = true;
+            return hit;
         }
     }
 }

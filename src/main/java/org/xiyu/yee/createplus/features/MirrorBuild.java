@@ -1,126 +1,172 @@
 package org.xiyu.yee.createplus.features;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.ColorSetting;
+import org.xiyu.yee.createplus.settings.EnumSetting;
+import org.xiyu.yee.createplus.utils.BlockEdits;
+import org.xiyu.yee.createplus.utils.KeyBindings;
+import org.xiyu.yee.createplus.utils.RenderUtils;
 
-public class MirrorBuild extends CreativePlusFeature {
-    private BlockPos mirrorPoint = null;
-    private Direction.Axis mirrorAxis = Direction.Axis.X; // 默认X轴镜像
+/**
+ * 对称建造：放置方块时自动在镜像位置也放一个。
+ *
+ * Ctrl + 右键设置镜像面，Ctrl + 左键清除。镜像面会在世界里画出来，
+ * 免得建到一半忘了对称轴在哪。
+ */
+public class MirrorBuild extends CreativePlusFeature implements WorldRenderFeature {
+
+    public enum Axis {
+        /** 东西方向对称（镜像 X）。 */
+        X,
+        /** 南北方向对称（镜像 Z）。 */
+        Z,
+        /** 四向对称。 */
+        BOTH
+    }
+
+    private static final int PLANE_HALF_LENGTH = 24;
+
+    private final EnumSetting<Axis> axis = enumSetting("axis", Axis.X);
+    private final BooleanSetting showPlane = boolSetting("show_plane", true);
+    private final ColorSetting planeColor = colorSetting("plane_color", 0xFFFFC24B);
+
+    private BlockPos mirrorPoint;
+    /** 自己发出的镜像放置也会触发交互事件，用这个标记避免无限递归。 */
+    private boolean mirroring;
 
     public MirrorBuild() {
-        super("mirror_build", "同时在对称位置放置方块");
+        super("mirror_build", "放置方块时在对称位置同步放置", Category.BUILDING);
     }
 
     @Override
     public void onEnable() {
-        mirrorPoint = null;
-        Minecraft.getInstance().player.sendSystemMessage(
-            Component.literal("§b请使用木剑: 右键选择镜像点，Shift+右键切换镜像轴(当前: " + getMirrorAxisName() + ")")
-        );
+        MinecraftForge.EVENT_BUS.register(this);
+        notifyPlayer("§b[CreatePlus] §7对称建造已启用：§fCtrl + 右键§7 设置镜像面，§fCtrl + 左键§7 清除");
     }
 
     @Override
     public void onDisable() {
+        MinecraftForge.EVENT_BUS.unregister(this);
         mirrorPoint = null;
     }
 
-    private String getMirrorAxisName() {
-        return switch (mirrorAxis) {
-            case X -> "X轴(东西)";
-            case Z -> "Z轴(南北)";
-            default -> "未知";
-        };
-    }
-
-    public void toggleMirrorAxis() {
-        mirrorAxis = (mirrorAxis == Direction.Axis.X) ? Direction.Axis.Z : Direction.Axis.X;
-        Minecraft.getInstance().player.sendSystemMessage(
-            Component.literal("§b已切换镜像轴: " + getMirrorAxisName())
-        );
-    }
-
+    /** Ctrl + 滚轮切换对称轴。 */
     @Override
-    public void handleClick(boolean isRightClick) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
+    public boolean handleScroll(double delta) {
+        if (!KeyBindings.modifierDown() || mirrorPoint == null) return false;
+        axis.cycle(delta > 0 ? 1 : -1);
+        notifyActionBar("§b对称轴: §f" + axis.getDisplayValue());
+        return true;
+    }
 
-        // 检查玩家是否手持木剑
-        if (!mc.player.getMainHandItem().is(net.minecraft.world.item.Items.WOODEN_SWORD)) {
-            return;
+    /**
+     * Ctrl + 左右键设置/清除镜像面，并且不让这次点击真的动到方块。
+     *
+     * 拦截点必须是按键映射事件：{@code PlayerInteractEvent} 被取消之后，
+     * 客户端仍然会把交互数据包发给服务端，创造模式下照样会破坏或放置方块。
+     */
+    @SubscribeEvent
+    public void onInteraction(InputEvent.InteractionKeyMappingTriggered event) {
+        if (!isEnabled() || !KeyBindings.modifierDown()) return;
+        if (!event.isAttack() && !event.isUseItem()) return;
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.hitResult == null || mc.hitResult.getType() != HitResult.Type.BLOCK) return;
+
+        if (event.isAttack()) {
+            mirrorPoint = null;
+            notifyActionBar("§c已清除镜像面");
+        } else {
+            mirrorPoint = ((BlockHitResult) mc.hitResult).getBlockPos();
+            notifyActionBar("§a镜像面: §f" + mirrorPoint.toShortString()
+                + " §7(" + axis.getDisplayValue() + ")");
         }
 
-        if (mc.hitResult == null || mc.hitResult.getType() != HitResult.Type.BLOCK) return;
-        BlockHitResult blockHit = (BlockHitResult) mc.hitResult;
+        event.setSwingHand(false);
+        event.setCanceled(true);
+    }
 
-        if (isRightClick) {
-            if (mc.player.isShiftKeyDown()) {
-                // Shift+右键：切换镜像轴
-                toggleMirrorAxis();
-            } else {
-                // 普通右键：设置镜像点
-                if (mirrorPoint == null) {
-                    mirrorPoint = blockHit.getBlockPos();
-                    mc.player.sendSystemMessage(
-                        Component.literal("§a已设置镜像点: " + mirrorPoint.toShortString())
-                    );
+    @SubscribeEvent
+    public void onRightClick(PlayerInteractEvent.RightClickBlock event) {
+        if (!isEnabled() || mirroring || !event.getLevel().isClientSide()) return;
+        if (KeyBindings.modifierDown()) return;
+        if (mirrorPoint == null) return;
+        if (!(event.getItemStack().getItem() instanceof BlockItem)) return;
+
+        BlockHitResult hit = event.getHitVec();
+        BlockPos placed = hit.getBlockPos().relative(hit.getDirection());
+
+        mirroring = true;
+        try {
+            switch (axis.get()) {
+                case X -> mirrorPlace(mirrorX(placed));
+                case Z -> mirrorPlace(mirrorZ(placed));
+                case BOTH -> {
+                    mirrorPlace(mirrorX(placed));
+                    mirrorPlace(mirrorZ(placed));
+                    mirrorPlace(mirrorZ(mirrorX(placed)));
                 }
             }
-        } else {
-            // 左键：重置镜像点
-            mirrorPoint = null;
-            mc.player.sendSystemMessage(Component.literal("§c已重置镜像点"));
+        } finally {
+            mirroring = false;
+        }
+    }
+
+    private void mirrorPlace(BlockPos target) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        if (!mc.level.getBlockState(target).isAir()) return;
+        BlockEdits.placeWithHeldItem(target, InteractionHand.MAIN_HAND);
+    }
+
+    private BlockPos mirrorX(BlockPos pos) {
+        return new BlockPos(2 * mirrorPoint.getX() - pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private BlockPos mirrorZ(BlockPos pos) {
+        return new BlockPos(pos.getX(), pos.getY(), 2 * mirrorPoint.getZ() - pos.getZ());
+    }
+
+    @Override
+    public void renderWorld(PoseStack poseStack, Camera camera, float partialTick) {
+        if (mirrorPoint == null || !showPlane.get()) return;
+
+        int color = planeColor.argb();
+        float r = ((color >> 16) & 0xFF) / 255.0F;
+        float g = ((color >> 8) & 0xFF) / 255.0F;
+        float b = (color & 0xFF) / 255.0F;
+
+        double cx = mirrorPoint.getX() + 0.5D;
+        double cz = mirrorPoint.getZ() + 0.5D;
+        double y = mirrorPoint.getY() + 0.02D;
+
+        if (axis.get() != Axis.Z) {
+            RenderUtils.drawWorldLine(poseStack, camera,
+                cx, y, cz - PLANE_HALF_LENGTH, cx, y, cz + PLANE_HALF_LENGTH, r, g, b, 0.9F);
+        }
+        if (axis.get() != Axis.X) {
+            RenderUtils.drawWorldLine(poseStack, camera,
+                cx - PLANE_HALF_LENGTH, y, cz, cx + PLANE_HALF_LENGTH, y, cz, r, g, b, 0.9F);
         }
     }
 
     @Override
-    public void onTick() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
-
-        // 监听方块放置
-        if (mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK) {
-            BlockHitResult blockHit = (BlockHitResult) mc.hitResult;
-            
-            // 如果正在放置方块且有镜像点，则在镜像位置也放置
-            if (mc.options.keyUse.isDown() && mirrorPoint != null) {
-                handleBlockPlace((BlockHitResult) mc.hitResult);
-            }
-        }
+    public String getDetailedDescription() {
+        return getTranslatedDescription()
+            + "\n§7Ctrl + 右键设置镜像面，Ctrl + 左键清除，Ctrl + 滚轮换轴"
+            + "\n§7对称轴: §f" + axis.getDisplayValue()
+            + "\n§7镜像面: §f" + (mirrorPoint == null ? "未设置" : mirrorPoint.toShortString());
     }
-
-    public void handleBlockPlace(BlockHitResult hitResult) {
-        if (mirrorPoint == null) return;
-
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.level == null) return;
-
-        BlockPos placePos = hitResult.getBlockPos();
-        BlockPos mirroredPos = getMirroredPosition(placePos);
-
-        // 发送放置方块数据包到镜像位置
-        mc.player.connection.send(new ServerboundUseItemOnPacket(
-            InteractionHand.MAIN_HAND,
-            new BlockHitResult(mc.player.position(), hitResult.getDirection(), mirroredPos, false),
-            0
-        ));
-    }
-
-    private BlockPos getMirroredPosition(BlockPos pos) {
-        if (mirrorAxis == Direction.Axis.X) {
-            // X轴镜像：镜像点的X坐标 + (镜像点的X坐标 - 原始点的X坐标)
-            int deltaX = mirrorPoint.getX() - pos.getX();
-            return new BlockPos(mirrorPoint.getX() + deltaX, pos.getY(), pos.getZ());
-        } else {
-            // Z轴镜像：镜像点的Z坐标 + (镜像点的Z坐标 - 原始点的Z坐标)
-            int deltaZ = mirrorPoint.getZ() - pos.getZ();
-            return new BlockPos(pos.getX(), pos.getY(), mirrorPoint.getZ() + deltaZ);
-        }
-    }
-} 
+}

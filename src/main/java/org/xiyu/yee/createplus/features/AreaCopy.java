@@ -1,222 +1,259 @@
 package org.xiyu.yee.createplus.features;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
-import java.util.HashMap;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.EnumSetting;
+import org.xiyu.yee.createplus.utils.BlockEdits;
+import org.xiyu.yee.createplus.utils.EditHistory;
+import org.xiyu.yee.createplus.utils.EditQueue;
+import org.xiyu.yee.createplus.utils.KeyBindings;
+import org.xiyu.yee.createplus.utils.Selection;
+
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Queue;
-import java.util.LinkedList;
 
+/**
+ * 复制选区并粘贴到别处，支持旋转与镜像。
+ *
+ * 用 §f/createplus copy§7 与 §f/createplus paste§7 操作，选区由选区工具提供。
+ */
 public class AreaCopy extends CreativePlusFeature {
-    private BlockPos firstPos = null;
-    private BlockPos secondPos = null;
-    private Map<BlockPos, BlockState> copiedBlocks = new HashMap<>();
-    private BlockPos pasteReference = null;
-    private Queue<BlockPos> placementQueue = new LinkedList<>();
-    private boolean isPlacing = false;
-    private static final int PLACE_DELAY = 2; // ticks between block placements
-    private int tickCounter = 0;
 
-    public AreaCopy() {
-        super("area_copy", "复制和粘贴选定区域的建筑");
+    public enum Anchor {
+        /** 粘贴到准星指向的方块。 */
+        LOOK,
+        /** 粘贴到脚下。 */
+        FEET
     }
 
-    @Override
-    public void onEnable() {
-        reset();
-        Minecraft.getInstance().player.sendSystemMessage(
-            Component.literal("§b请使用木铲选择区域: 右键选择点，左键重置")
-        );
+    private final EnumSetting<Anchor> anchor = enumSetting("anchor", Anchor.LOOK);
+    private final EnumSetting<Rotation> rotation = enumSetting("rotation", Rotation.NONE);
+    private final EnumSetting<Mirror> mirror = enumSetting("mirror", Mirror.NONE);
+    private final BooleanSetting includeAir = boolSetting("include_air", false);
+
+    /** 相对于选区最小角的方块快照。 */
+    private final Map<BlockPos, BlockState> clipboard = new LinkedHashMap<>();
+    private int sizeX;
+    private int sizeY;
+    private int sizeZ;
+
+    public AreaCopy() {
+        super("area_copy", "复制选区内的建筑并粘贴到别处，可旋转镜像", Category.BUILDING);
     }
 
     @Override
     public void onDisable() {
-        reset();
+        clipboard.clear();
     }
 
-    private void reset() {
-        firstPos = null;
-        secondPos = null;
-        copiedBlocks.clear();
-        pasteReference = null;
-        placementQueue.clear();
-        isPlacing = false;
+    public int clipboardSize() {
+        return clipboard.size();
     }
 
+    /** Ctrl + 滚轮切换粘贴旋转角度。 */
     @Override
-    public void onTick() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
+    public boolean handleScroll(double delta) {
+        if (clipboard.isEmpty() || !KeyBindings.modifierDown()) return false;
+        rotation.cycle(delta > 0 ? 1 : -1);
+        notifyActionBar("§b粘贴旋转: §f" + rotation.getDisplayValue());
+        return true;
+    }
 
-        // 处理自动放置
-        if (isPlacing && !placementQueue.isEmpty()) {
-            tickCounter++;
-            if (tickCounter >= PLACE_DELAY) {
-                tickCounter = 0;
-                placeNextBlock(mc);
-            }
+    public void copy() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+
+        Selection selection = Selection.shared();
+        if (!selection.isComplete()) {
+            notifyActionBar("§c请先用选区工具选择一个区域");
+            return;
         }
-    }
-
-    @Override
-    public void handleClick(boolean isRightClick) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.isCreative()) return;
-
-        // 检查玩家是否手持木铲
-        if (!mc.player.getMainHandItem().is(net.minecraft.world.item.Items.WOODEN_SHOVEL)) {
+        if (selection.volume() > BlockEdits.MAX_VOLUME) {
+            notifyActionBar("§c选区太大了（" + selection.volume() + "）");
             return;
         }
 
-        if (mc.hitResult == null || mc.hitResult.getType() != HitResult.Type.BLOCK) return;
-        BlockHitResult blockHit = (BlockHitResult) mc.hitResult;
+        BlockPos min = selection.getMin();
+        BlockPos max = selection.getMax();
+        clipboard.clear();
+        sizeX = selection.width();
+        sizeY = selection.height();
+        sizeZ = selection.depth();
 
-        if (isRightClick) {
-            if (firstPos == null) {
-                firstPos = blockHit.getBlockPos();
-                mc.player.sendSystemMessage(Component.literal("§a已设置第一个点"));
-            } else if (secondPos == null) {
-                secondPos = blockHit.getBlockPos();
-                copyArea(mc);
-            } else {
-                pasteReference = blockHit.getBlockPos();
-                pasteArea(mc);
-            }
-        } else {
-            reset();
-            mc.player.sendSystemMessage(Component.literal("§c已重置选区"));
-        }
-    }
-
-    private void copyArea(Minecraft mc) {
-        if (firstPos == null || secondPos == null || mc.level == null) return;
-
-        copiedBlocks.clear();
-        int minX = Math.min(firstPos.getX(), secondPos.getX());
-        int minY = Math.min(firstPos.getY(), secondPos.getY());
-        int minZ = Math.min(firstPos.getZ(), secondPos.getZ());
-        int maxX = Math.max(firstPos.getX(), secondPos.getX());
-        int maxY = Math.max(firstPos.getY(), secondPos.getY());
-        int maxZ = Math.max(firstPos.getZ(), secondPos.getZ());
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int y = min.getY(); y <= max.getY(); y++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
                     BlockPos pos = new BlockPos(x, y, z);
                     BlockState state = mc.level.getBlockState(pos);
-                    if (!state.isAir()) {
-                        copiedBlocks.put(pos.subtract(firstPos), state);
+                    if (state.isAir() && !includeAir.get()) continue;
+                    clipboard.put(pos.subtract(min), state);
+                }
+            }
+        }
+
+        notifyPlayer(String.format("§a已复制 §f%d §a个方块 §7(%dx%dx%d)",
+            clipboard.size(), sizeX, sizeY, sizeZ));
+    }
+
+    public void paste() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+
+        if (clipboard.isEmpty()) {
+            notifyActionBar("§c剪贴板是空的，先执行 /createplus copy");
+            return;
+        }
+        if (EditQueue.isBusy()) {
+            notifyActionBar("§c上一次操作还没做完");
+            return;
+        }
+
+        BlockPos origin = resolveOrigin(mc);
+        if (origin == null) {
+            notifyActionBar("§c请先看向一个方块");
+            return;
+        }
+
+        Rotation rot = rotation.get();
+        Mirror mir = mirror.get();
+
+        EditHistory.Step step = EditHistory.begin("粘贴");
+        EditQueue.start("粘贴");
+
+        for (Map.Entry<BlockPos, BlockState> entry : clipboard.entrySet()) {
+            BlockPos offset = transform(entry.getKey(), rot, mir);
+            BlockPos target = origin.offset(offset);
+            BlockState state = entry.getValue().mirror(mir).rotate(rot);
+
+            step.record(target, mc.level.getBlockState(target));
+            EditQueue.enqueue(target, state);
+        }
+
+        EditHistory.commit(step);
+        notifyActionBar("§7开始粘贴 §f" + clipboard.size() + " §7个方块");
+    }
+
+    /**
+     * 沿某个方向把选区整体重复若干次，相当于 WorldEdit 的 //stack。
+     *
+     * 走廊、柱廊、围墙这类等距重复的结构，用复制粘贴要对一次准星贴一次，
+     * 这里一条命令就能贴完，间距永远等于选区尺寸所以不会错位。
+     *
+     * @param direction 重复方向，传 null 表示用玩家当前的朝向
+     */
+    public void stack(int count, Direction direction) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+
+        Selection selection = Selection.shared();
+        if (!selection.isComplete()) {
+            notifyActionBar("§c请先用选区工具选择一个区域");
+            return;
+        }
+        if (EditQueue.isBusy()) {
+            notifyActionBar("§c上一次操作还没做完");
+            return;
+        }
+
+        long volume = selection.volume() * count;
+        if (volume > BlockEdits.MAX_VOLUME) {
+            notifyActionBar("§c阵列总量太大了（" + volume + "）");
+            return;
+        }
+
+        Direction axis = direction != null ? direction : Direction.getNearest(
+            mc.player.getLookAngle().x, mc.player.getLookAngle().y, mc.player.getLookAngle().z);
+        int span = switch (axis.getAxis()) {
+            case X -> selection.width();
+            case Y -> selection.height();
+            case Z -> selection.depth();
+        };
+
+        BlockPos min = selection.getMin();
+        BlockPos max = selection.getMax();
+        EditHistory.Step step = EditHistory.begin("阵列复制");
+        EditQueue.start("阵列复制");
+
+        int queued = 0;
+        for (int copy = 1; copy <= count; copy++) {
+            int shift = span * copy;
+            for (int x = min.getX(); x <= max.getX(); x++) {
+                for (int y = min.getY(); y <= max.getY(); y++) {
+                    for (int z = min.getZ(); z <= max.getZ(); z++) {
+                        BlockState state = mc.level.getBlockState(new BlockPos(x, y, z));
+                        if (state.isAir() && !includeAir.get()) continue;
+
+                        BlockPos target = new BlockPos(
+                            x + axis.getStepX() * shift,
+                            y + axis.getStepY() * shift,
+                            z + axis.getStepZ() * shift);
+                        step.record(target, mc.level.getBlockState(target));
+                        EditQueue.enqueue(target, state);
+                        queued++;
                     }
                 }
             }
         }
 
-        mc.player.sendSystemMessage(Component.literal("§a已复制 " + copiedBlocks.size() + " 个方块"));
+        EditHistory.commit(step);
+        notifyPlayer(String.format("§a阵列 §f%d §a份 · §f%d §a个方块 §7(方向 %s)",
+            count, queued, axis.getName()));
     }
 
-    private void pasteArea(Minecraft mc) {
-        if (copiedBlocks.isEmpty() || pasteReference == null || mc.player == null) return;
+    /**
+     * 把相对坐标按旋转/镜像变换。
+     *
+     * 旋转是绕 Y 轴的，尺寸也要跟着换，否则 90° 之后建筑会跑到选区外面。
+     */
+    private BlockPos transform(BlockPos offset, Rotation rot, Mirror mir) {
+        int x = offset.getX();
+        int z = offset.getZ();
 
-        // 检查权限等级
-        boolean hasCommandPermission = mc.player.hasPermissions(2);
+        if (mir == Mirror.FRONT_BACK) {
+            x = sizeX - 1 - x;
+        } else if (mir == Mirror.LEFT_RIGHT) {
+            z = sizeZ - 1 - z;
+        }
 
-        if (hasCommandPermission) {
-            // 使用命令进行粘贴
-            pasteUsingCommands(mc);
+        return switch (rot) {
+            case NONE -> new BlockPos(x, offset.getY(), z);
+            case CLOCKWISE_90 -> new BlockPos(sizeZ - 1 - z, offset.getY(), x);
+            case CLOCKWISE_180 -> new BlockPos(sizeX - 1 - x, offset.getY(), sizeZ - 1 - z);
+            case COUNTERCLOCKWISE_90 -> new BlockPos(z, offset.getY(), sizeX - 1 - x);
+        };
+    }
+
+    private BlockPos resolveOrigin(Minecraft mc) {
+        if (anchor.get() == Anchor.FEET) {
+            return mc.player.blockPosition();
+        }
+        if (mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK) {
+            BlockHitResult hit = (BlockHitResult) mc.hitResult;
+            return hit.getBlockPos().relative(hit.getDirection());
+        }
+        return null;
+    }
+
+    @Override
+    public String getDetailedDescription() {
+        StringBuilder text = new StringBuilder(getTranslatedDescription());
+        text.append("\n§7/createplus copy §8· §7/createplus paste §8· §7/createplus stack <份数>");
+        if (clipboard.isEmpty()) {
+            text.append("\n§7剪贴板: 空");
         } else {
-            // 使用模拟放置进行粘贴
-            preparePlacementQueue();
-            isPlacing = true;
+            text.append(String.format("\n§7剪贴板: §f%d §7个方块 (%dx%dx%d)",
+                clipboard.size(), sizeX, sizeY, sizeZ));
         }
+        text.append("\n§7旋转: §f").append(rotation.getDisplayValue())
+            .append(" §7镜像: §f").append(mirror.getDisplayValue());
+        text.append("\n§7Ctrl + 滚轮切换旋转角度");
+        return text.toString();
     }
-
-    private void pasteUsingCommands(Minecraft mc) {
-        for (Map.Entry<BlockPos, BlockState> entry : copiedBlocks.entrySet()) {
-            BlockPos targetPos = pasteReference.offset(entry.getKey());
-            BlockState state = entry.getValue();
-            
-            // 获取方块的注册名
-            String blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                .getKey(state.getBlock())
-                .toString();
-            
-            // 构建方块状态
-            StringBuilder blockStateString = new StringBuilder();
-            
-            // 收集所有方块状态属性
-            state.getProperties().forEach(property -> {
-                if (blockStateString.length() > 0) {
-                    blockStateString.append(",");
-                } else {
-                    blockStateString.append("[");
-                }
-                
-                String propertyName = property.getName();
-                String propertyValue = state.getValue(property).toString().toLowerCase();
-                blockStateString.append(propertyName).append("=").append(propertyValue);
-            });
-            
-            if (blockStateString.length() > 0) {
-                blockStateString.append("]");
-            }
-            
-            // 构建setblock命令 (1.20格式)
-            String command = String.format("setblock %d %d %d %s%s",
-                targetPos.getX(), targetPos.getY(), targetPos.getZ(),
-                blockId,
-                blockStateString.toString()
-            );
-            
-            // 发送命令
-            mc.player.connection.sendCommand(command);
-        }
-        mc.player.sendSystemMessage(Component.literal("§a已通过命令粘贴 " + copiedBlocks.size() + " 个方块"));
-    }
-
-    private void preparePlacementQueue() {
-        placementQueue.clear();
-        // 按照从下到上的顺序添加方块位置
-        copiedBlocks.entrySet().stream()
-            .sorted((e1, e2) -> e1.getKey().getY() - e2.getKey().getY())
-            .forEach(entry -> placementQueue.offer(pasteReference.offset(entry.getKey())));
-    }
-
-    private void placeNextBlock(Minecraft mc) {
-        if (placementQueue.isEmpty() || mc.player == null) {
-            isPlacing = false;
-            return;
-        }
-
-        BlockPos pos = placementQueue.poll();
-        BlockState state = copiedBlocks.get(pos.subtract(pasteReference));
-        if (state == null) return;
-
-        // 移动到目标位置
-        double x = pos.getX() + 0.5;
-        double y = pos.getY() - 0.5;
-        double z = pos.getZ() + 0.5;
-        
-        // 发送移动数据包
-        mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(x, y, z, true));
-        
-        // 发送放置方块数据包
-        mc.player.connection.send(new ServerboundUseItemOnPacket(
-            InteractionHand.MAIN_HAND,
-            new BlockHitResult(mc.player.position(), mc.player.getDirection(), pos, false),
-            0
-        ));
-
-        if (placementQueue.isEmpty()) {
-            isPlacing = false;
-            mc.player.sendSystemMessage(Component.literal("§a已完成方块放置"));
-        }
-    }
-} 
+}

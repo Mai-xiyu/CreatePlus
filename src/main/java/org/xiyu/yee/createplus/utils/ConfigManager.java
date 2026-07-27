@@ -3,254 +3,158 @@ package org.xiyu.yee.createplus.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import net.minecraft.client.Minecraft;
 import org.xiyu.yee.createplus.Createplus;
+import org.xiyu.yee.createplus.commands.studio.AiSessionHistory;
 import org.xiyu.yee.createplus.features.CreativePlusFeature;
-import org.xiyu.yee.createplus.features.SpeedAdjust;
-import org.xiyu.yee.createplus.features.Performance;
-import org.xiyu.yee.createplus.features.GammaOverride;
-import org.xiyu.yee.createplus.features.PingDisplay;
-import org.xiyu.yee.createplus.features.MiniHUD;
+import org.xiyu.yee.createplus.settings.Setting;
 import org.xiyu.yee.createplus.ui.FeatureScreen;
 
-import java.io.*;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class ConfigManager {
+/**
+ * 配置读写。
+ *
+ * 格式：
+ * <pre>
+ * {
+ *   "ui": { "opacity": 0.9 },
+ *   "features": {
+ *     "speed_adjust": { "enabled": true, "settings": { "fly": 2.0 } }
+ *   }
+ * }
+ * </pre>
+ *
+ * 所有功能都通过通用的 Setting 序列化，新增功能不需要改动本类。
+ */
+public final class ConfigManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String CONFIG_FILE = "createplus/createplus.json";
-    private static JsonObject config;
+    private static final String FILE_NAME = "createplus.json";
 
-    public static void init() {
-        loadConfig();
+    private ConfigManager() {
     }
 
-    public static void loadConfig() {
+    private static Path configPath() throws IOException {
+        return FileUtils.getModDirectory().resolve(FILE_NAME);
+    }
+
+    public static synchronized void load() {
         try {
-            File configFile = new File(CONFIG_FILE);
-            if (!configFile.exists()) {
-                configFile.getParentFile().mkdirs();
-                saveConfig(); // 创建默认配置
+            Path path = configPath();
+            if (!Files.exists(path)) {
+                save();
                 return;
             }
 
-            String jsonStr = new String(Files.readAllBytes(configFile.toPath()));
-            config = GSON.fromJson(jsonStr, JsonObject.class);
+            String json = Files.readString(path, StandardCharsets.UTF_8);
+            JsonObject root = GSON.fromJson(json, JsonObject.class);
+            if (root == null) return;
 
-            // 加载所有功能的配置
-            for (CreativePlusFeature feature : Createplus.FEATURE_MANAGER.getFeatures()) {
-                loadFeatureConfig(feature);
+            if (root.has("ui") && root.get("ui").isJsonObject()) {
+                readUi(root.getAsJsonObject("ui"));
             }
+
+            if (root.has("features") && root.get("features").isJsonObject()) {
+                JsonObject features = root.getAsJsonObject("features");
+                for (CreativePlusFeature feature : Createplus.FEATURE_MANAGER.getFeatures()) {
+                    if (!features.has(feature.getName())) continue;
+                    readFeature(feature, features.getAsJsonObject(feature.getName()));
+                }
+            }
+
+            if (root.has("hud_layout") && root.get("hud_layout").isJsonObject()) {
+                HudLayout.fromJson(root.getAsJsonObject("hud_layout"));
+            }
+
+            if (root.has("ai_studio") && root.get("ai_studio").isJsonObject()) {
+                AiSessionHistory.fromJson(root.getAsJsonObject("ai_studio"));
+            }
+
+            // 信息面板的透明度驱动 F9 菜单
+            var mini = Createplus.FEATURE_MANAGER.get(
+                org.xiyu.yee.createplus.features.MiniHUD.class);
+            if (mini != null) mini.syncMenuOpacity();
         } catch (Exception e) {
-            e.printStackTrace();
-            config = new JsonObject();
+            Createplus.LOGGER.error("CreatePlus: failed to load config, using defaults", e);
         }
     }
 
-    public static void saveConfig() {
+    public static synchronized void save() {
         try {
-            if (config == null) {
-                config = new JsonObject();
-            }
+            JsonObject root = new JsonObject();
+            root.add("ui", writeUi());
+            root.add("hud_layout", HudLayout.toJson());
+            root.add("ai_studio", AiSessionHistory.toJson());
 
-            // 保存所有功能的配置
-        for (CreativePlusFeature feature : Createplus.FEATURE_MANAGER.getFeatures()) {
-                saveFeatureConfig(feature);
+            JsonObject features = new JsonObject();
+            for (CreativePlusFeature feature : Createplus.FEATURE_MANAGER.getFeatures()) {
+                features.add(feature.getName(), writeFeature(feature));
             }
+            root.add("features", features);
 
-            String jsonStr = GSON.toJson(config);
-            Files.write(Path.of(CONFIG_FILE), jsonStr.getBytes());
+            Path path = configPath();
+            Files.writeString(path, GSON.toJson(root), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            e.printStackTrace();
+            Createplus.LOGGER.error("CreatePlus: failed to save config", e);
         }
     }
 
-    private static void loadFeatureConfig(CreativePlusFeature feature) {
-        String featureName = feature.getName();
-        if (!config.has(featureName)) return;
+    private static void readFeature(CreativePlusFeature feature, JsonObject json) {
+        if (json.has("settings") && json.get("settings").isJsonObject()) {
+            JsonObject settings = json.getAsJsonObject("settings");
+            for (Setting<?> setting : feature.getSettings()) {
+                if (settings.has(setting.getId())) {
+                    setting.fromJson(settings.get(setting.getId()));
+                }
+            }
+        }
 
-        JsonObject featureConfig = config.getAsJsonObject(featureName);
-        
-        // 加载功能启用状态
-        if (featureConfig.has("enabled")) {
-            boolean enabled = featureConfig.get("enabled").getAsBoolean();
+        // 启用状态最后应用：这样 onEnable() 能读到已经加载好的设置值。
+        // 此时玩家实体通常还不存在，需要玩家的功能会在 onWorldJoin() 里补上。
+        if (json.has("enabled")) {
+            boolean enabled = json.get("enabled").getAsBoolean();
+            // HUD 编辑模式不应在启动时自动进入
+            if (feature instanceof org.xiyu.yee.createplus.features.HudEditor) {
+                enabled = false;
+            }
             feature.setEnabled(enabled);
         }
-
-        // 加载特定功能的配置
-        if (feature instanceof SpeedAdjust) {
-            loadSpeedAdjustConfig((SpeedAdjust) feature, featureConfig);
-        } else if (feature instanceof Performance) {
-            loadPerformanceConfig((Performance) feature, featureConfig);
-        } else if (feature instanceof GammaOverride) {
-            loadGammaOverrideConfig((GammaOverride) feature, featureConfig);
-        } else if (feature instanceof PingDisplay) {
-            loadPingDisplayConfig((PingDisplay) feature, featureConfig);
-        } else if (feature instanceof MiniHUD) {
-            loadMiniHUDConfig((MiniHUD) feature, featureConfig);
-        }
     }
 
-    private static void saveFeatureConfig(CreativePlusFeature feature) {
-        String featureName = feature.getName();
-        JsonObject featureConfig = new JsonObject();
-        
-        // 保存功能启用状态
-        featureConfig.addProperty("enabled", feature.isEnabled());
-
-        // 保存特定功能的配置
-        if (feature instanceof SpeedAdjust) {
-            saveSpeedAdjustConfig((SpeedAdjust) feature, featureConfig);
-        } else if (feature instanceof Performance) {
-            savePerformanceConfig((Performance) feature, featureConfig);
-        } else if (feature instanceof GammaOverride) {
-            saveGammaOverrideConfig((GammaOverride) feature, featureConfig);
-        } else if (feature instanceof PingDisplay) {
-            savePingDisplayConfig((PingDisplay) feature, featureConfig);
-        } else if (feature instanceof MiniHUD) {
-            saveMiniHUDConfig((MiniHUD) feature, featureConfig);
+    private static JsonObject writeFeature(CreativePlusFeature feature) {
+        JsonObject json = new JsonObject();
+        json.addProperty("enabled", feature.isEnabled());
+        if (feature.hasSettings()) {
+            JsonObject settings = new JsonObject();
+            for (Setting<?> setting : feature.getSettings()) {
+                settings.add(setting.getId(), setting.toJson());
+            }
+            json.add("settings", settings);
         }
-
-        config.add(featureName, featureConfig);
+        return json;
     }
 
-    private static void loadSpeedAdjustConfig(SpeedAdjust speedAdjust, JsonObject config) {
-        if (config.has("speeds")) {
-            JsonObject speeds = config.getAsJsonObject("speeds");
-            for (SpeedAdjust.SpeedType type : SpeedAdjust.SpeedType.values()) {
-                if (speeds.has(type.name())) {
-                    float value = speeds.get(type.name()).getAsFloat();
-                    speedAdjust.setSpeedValue(type, value);
+    private static JsonObject writeUi() {
+        JsonObject ui = new JsonObject();
+        ui.addProperty("opacity", FeatureScreen.getOpacity());
+        return ui;
+    }
+
+    private static void readUi(JsonObject ui) {
+        if (ui.has("opacity")) {
+            float opacity = ui.get("opacity").getAsFloat();
+            FeatureScreen.setOpacity(opacity);
+            // 兼容旧配置：把顶栏透明度迁到信息面板设置
+            var mini = Createplus.FEATURE_MANAGER.get(
+                org.xiyu.yee.createplus.features.MiniHUD.class);
+            if (mini != null) {
+                var setting = mini.getSetting("hud_opacity");
+                if (setting instanceof org.xiyu.yee.createplus.settings.DoubleSetting ds) {
+                    ds.set((double) opacity);
                 }
             }
         }
     }
-
-    private static void saveSpeedAdjustConfig(SpeedAdjust speedAdjust, JsonObject config) {
-        JsonObject speeds = new JsonObject();
-        for (SpeedAdjust.SpeedType type : SpeedAdjust.SpeedType.values()) {
-            speeds.addProperty(type.name(), speedAdjust.getSpeedValue(type));
-        }
-        config.add("speeds", speeds);
-    }
-
-    private static void loadPerformanceConfig(Performance performance, JsonObject config) {
-        // 粒子效果
-        if (config.has("disableParticles")) {
-            performance.setDisableParticles(config.get("disableParticles").getAsBoolean());
-        }
-        
-        // 方块破坏粒子
-        if (config.has("disableBlockBreakingParticles")) {
-            performance.setDisableBlockBreakingParticles(config.get("disableBlockBreakingParticles").getAsBoolean());
-        }
-        
-        // 死亡生物渲染
-        if (config.has("disableDeadMobRendering")) {
-            performance.setDisableDeadMobRendering(config.get("disableDeadMobRendering").getAsBoolean());
-        }
-        
-        // 实体渲染
-        if (config.has("disableEntityRendering")) {
-            performance.setDisableEntityRendering(config.get("disableEntityRendering").getAsBoolean());
-        }
-        
-        // 掉落方块渲染
-        if (config.has("disableFallingBlockEntityRendering")) {
-            performance.setDisableFallingBlockEntityRendering(config.get("disableFallingBlockEntityRendering").getAsBoolean());
-        }
-        
-        // 传送门GUI关闭
-        if (config.has("disablePortalGuiClosing")) {
-            performance.setDisablePortalGuiClosing(config.get("disablePortalGuiClosing").getAsBoolean());
-        }
-    }
-
-    private static void savePerformanceConfig(Performance performance, JsonObject config) {
-        // 粒子效果
-        config.addProperty("disableParticles", performance.isDisableParticles());
-        
-        // 方块破坏粒子
-        config.addProperty("disableBlockBreakingParticles", performance.isDisableBlockBreakingParticles());
-        
-        // 死亡生物渲染
-        config.addProperty("disableDeadMobRendering", performance.isDisableDeadMobRendering());
-        
-        // 实体渲染
-        config.addProperty("disableEntityRendering", performance.isDisableEntityRendering());
-        
-        // 掉落方块渲染
-        config.addProperty("disableFallingBlockEntityRendering", performance.isDisableFallingBlockEntityRendering());
-        
-        // 传送门GUI关闭
-        config.addProperty("disablePortalGuiClosing", performance.isDisablePortalGuiClosing());
-    }
-
-    private static void loadGammaOverrideConfig(GammaOverride gammaOverride, JsonObject config) {
-        if (config.has("originalGamma")) {
-            gammaOverride.setOriginalGamma(config.get("originalGamma").getAsDouble());
-        }
-        if (config.has("nightVisionGamma")) {
-            gammaOverride.setNightVisionGamma(config.get("nightVisionGamma").getAsDouble());
-        }
-    }
-
-    private static void saveGammaOverrideConfig(GammaOverride gammaOverride, JsonObject config) {
-        config.addProperty("originalGamma", gammaOverride.getOriginalGamma());
-        config.addProperty("nightVisionGamma", gammaOverride.getNightVisionGamma());
-    }
-
-    private static void loadPingDisplayConfig(PingDisplay pingDisplay, JsonObject config) {
-        if (config.has("backgroundColor")) {
-            pingDisplay.setBackgroundColor(config.get("backgroundColor").getAsInt());
-        }
-        if (config.has("backgroundOpacity")) {
-            pingDisplay.setBackgroundOpacity(config.get("backgroundOpacity").getAsFloat());
-        }
-    }
-
-    private static void savePingDisplayConfig(PingDisplay pingDisplay, JsonObject config) {
-        config.addProperty("backgroundColor", pingDisplay.getBackgroundColor());
-        config.addProperty("backgroundOpacity", pingDisplay.getBackgroundOpacity());
-    }
-
-    private static void loadMiniHUDConfig(MiniHUD miniHUD, JsonObject config) {
-        // 加载文本颜色
-        if (config.has("textColors")) {
-            JsonObject textColors = config.getAsJsonObject("textColors");
-            for (String element : new String[]{"fps", "time", "pos", "biome", "localtime"}) {
-                if (textColors.has(element)) {
-                    miniHUD.setTextColor(element, textColors.get(element).getAsInt());
-                }
-            }
-        }
-
-        // 加载数值颜色
-        if (config.has("valueColors")) {
-            JsonObject valueColors = config.getAsJsonObject("valueColors");
-            for (String element : new String[]{"fps", "time", "pos", "biome", "localtime"}) {
-                if (valueColors.has(element)) {
-                    miniHUD.setValueColor(element, valueColors.get(element).getAsInt());
-                }
-            }
-        }
-    }
-
-    private static void saveMiniHUDConfig(MiniHUD miniHUD, JsonObject config) {
-        // 保存文本颜色
-        JsonObject textColors = new JsonObject();
-        for (String element : new String[]{"fps", "time", "pos", "biome", "localtime"}) {
-            textColors.addProperty(element, miniHUD.getTextColor(element));
-        }
-        config.add("textColors", textColors);
-
-        // 保存数值颜色
-        JsonObject valueColors = new JsonObject();
-        for (String element : new String[]{"fps", "time", "pos", "biome", "localtime"}) {
-            valueColors.addProperty(element, miniHUD.getValueColor(element));
-        }
-        config.add("valueColors", valueColors);
-    }
-
-} 
+}

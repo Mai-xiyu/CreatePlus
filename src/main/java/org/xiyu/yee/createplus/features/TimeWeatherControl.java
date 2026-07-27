@@ -2,113 +2,90 @@ package org.xiyu.yee.createplus.features;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.network.chat.Component;
-import net.minecraftforge.client.event.ClientChatEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.common.MinecraftForge;
+import org.xiyu.yee.createplus.settings.BooleanSetting;
+import org.xiyu.yee.createplus.settings.EnumSetting;
+import org.xiyu.yee.createplus.settings.IntSetting;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
+/**
+ * 本地时间与天气覆盖。
+ *
+ * 全部只作用于客户端渲染，不会真的改服务器 —— 用来给建筑拍照选光线，
+ * 或者在雨天里安静地施工。
+ */
 public class TimeWeatherControl extends CreativePlusFeature {
-    private static final List<String> WEATHER_TYPES = Arrays.asList("晴天", "雨天", "雷暴");
-    private static final List<String> TIME_PRESETS = Arrays.asList("日出", "中午", "日落", "前夜", "午夜");
-    
+
+    public enum Weather {
+        /** 不干预。 */
+        UNCHANGED,
+        CLEAR,
+        RAIN,
+        THUNDER
+    }
+
+    /** 常用时刻，和原版 /time set 的取值一致。 */
+    public static final int SUNRISE = 23000;
+    public static final int DAY = 1000;
+    public static final int NOON = 6000;
+    public static final int SUNSET = 12000;
+    public static final int NIGHT = 13000;
+    public static final int MIDNIGHT = 18000;
+
+    private final BooleanSetting freezeTime = boolSetting("freeze_time", true);
+    private final IntSetting time = intSetting("time", NOON, 0, 23999, 100, "");
+    private final EnumSetting<Weather> weather = enumSetting("weather", Weather.CLEAR);
+
     public TimeWeatherControl() {
-        super("time_weather", "控制本地时间和天气");
-        MinecraftForge.EVENT_BUS.register(this);
-    }
-
-    @SubscribeEvent
-    public void onClientChat(ClientChatEvent event) {
-        String message = event.getMessage().trim();
-        
-        if (message.startsWith(".weather ")) {
-            event.setCanceled(true);
-            handleWeatherCommand(message.substring(9));
-        } else if (message.startsWith(".time ")) {
-            event.setCanceled(true);
-            handleTimeCommand(message.substring(6));
-        }
-    }
-
-    private void handleWeatherCommand(String type) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return;
-
-        switch (type) {
-            case "晴天" -> mc.level.setRainLevel(0);
-            case "雨天" -> {
-                mc.level.setRainLevel(1);
-                mc.level.setThunderLevel(0);
-            }
-            case "雷暴" -> {
-                mc.level.setRainLevel(1);
-                mc.level.setThunderLevel(1);
-            }
-            default -> mc.player.displayClientMessage(
-                Component.literal("§c无效的天气类型。可用类型: 晴天, 雨天, 雷暴"), 
-                false
-            );
-        }
-    }
-
-    private void handleTimeCommand(String timeStr) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return;
-
-        try {
-            long time = switch (timeStr) {
-                case "日出" -> 0;
-                case "中午" -> 6000;
-                case "日落" -> 12000;
-                case "前夜" -> 13000;
-                case "午夜" -> 18000;
-                default -> Long.parseLong(timeStr);
-            };
-            
-            if (time >= 0 && time <= 24000) {
-                mc.level.setDayTime(time);
-            } else {
-                mc.player.displayClientMessage(
-                    Component.literal("§c时间必须在 0-24000 之间"), 
-                    false
-                );
-            }
-        } catch (NumberFormatException e) {
-            mc.player.displayClientMessage(
-                Component.literal("§c无效的时间格式。可用预设: 日出, 中午, 日落, 前夜, 午夜"), 
-                false
-            );
-        }
-    }
-
-    // TAB补全支持
-    public static List<String> getWeatherSuggestions(String input) {
-        return WEATHER_TYPES.stream()
-            .filter(type -> type.startsWith(input))
-            .collect(Collectors.toList());
-    }
-
-    public static List<String> getTimeSuggestions(String input) {
-        return TIME_PRESETS.stream()
-            .filter(preset -> preset.startsWith(input))
-            .collect(Collectors.toList());
-    }
-
-    @Override
-    public void onEnable() {
-        // 不需要特殊初始化
-    }
-
-    @Override
-    public void onDisable() {
-        // 不需要特殊清理
+        super("time_weather", "本地覆盖时间与天气（仅客户端可见）", Category.RENDER);
     }
 
     @Override
     public void onTick() {
-        // 不需要tick更新
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc.level;
+        if (level == null) return;
+
+        if (freezeTime.get()) {
+            // 保留天数，只改一天之内的时刻，否则月相和统计会乱掉
+            long day = level.getDayTime() / 24000L;
+            level.setDayTime(day * 24000L + time.value());
+        }
+
+        switch (weather.get()) {
+            case CLEAR -> {
+                level.setRainLevel(0.0F);
+                level.setThunderLevel(0.0F);
+            }
+            case RAIN -> {
+                level.setRainLevel(1.0F);
+                level.setThunderLevel(0.0F);
+            }
+            case THUNDER -> {
+                level.setRainLevel(1.0F);
+                level.setThunderLevel(1.0F);
+            }
+            case UNCHANGED -> {
+            }
+        }
     }
-} 
+
+    public void setTime(int ticks) {
+        freezeTime.set(true);
+        time.set(Math.floorMod(ticks, 24000));
+    }
+
+    public void setWeather(Weather value) {
+        weather.set(value);
+    }
+
+    public int getTime() {
+        return time.value();
+    }
+
+    @Override
+    public String getDetailedDescription() {
+        return getTranslatedDescription()
+            + "\n§7时间: §f" + (freezeTime.get() ? time.value() + " 刻" : "不干预")
+            + "\n§7天气: §f" + weather.getDisplayValue()
+            + "\n§7/createplus time <预设|刻数> §8· §7/createplus weather <类型>";
+    }
+}
