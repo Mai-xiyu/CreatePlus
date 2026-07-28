@@ -13,6 +13,8 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.function.BiConsumer;
+
 /**
  * 方块编辑的统一入口。
  *
@@ -21,10 +23,35 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class BlockEdits {
 
-    /** 单次操作允许影响的最大方块数，防止手滑把服务器刷崩。 */
-    public static final int MAX_VOLUME = 32768;
+    /** 原版 {@code /fill} 单条命令硬上限。 */
+    public static final int FILL_COMMAND_MAX = 32768;
+
+    /** 可调上限的默认值（一亿）。 */
+    public static final int DEFAULT_MAX_VOLUME = 100_000_000;
+
+    /** 可调上限的最大值（一亿）。 */
+    public static final int ABSOLUTE_MAX_VOLUME = 100_000_000;
+
+    /** 可写入撤销历史的最大格数，过大易爆内存。 */
+    public static final int HISTORY_VOLUME = 32768;
+
+    private static int maxVolume = DEFAULT_MAX_VOLUME;
 
     private BlockEdits() {
+    }
+
+    /**
+     * 客户端单次操作软上限。超过 {@link #FILL_COMMAND_MAX} 时用多批 fill / EditQueue 拆开。
+     * 可在「区域填充」设置里改，或 {@code /createplus maxvolume}。
+     */
+    public static int maxVolume() {
+        return maxVolume;
+    }
+
+    public static void setMaxVolume(int value) {
+        if (value < FILL_COMMAND_MAX) value = FILL_COMMAND_MAX;
+        if (value > ABSOLUTE_MAX_VOLUME) value = ABSOLUTE_MAX_VOLUME;
+        maxVolume = value;
     }
 
     /** 玩家是否有权限使用 setblock / fill 这类命令。 */
@@ -67,13 +94,96 @@ public final class BlockEdits {
             pos.getX(), pos.getY(), pos.getZ(), toCommandString(state)));
     }
 
-    /** 用 fill 命令填充一个长方体。 */
+    /** 用 fill 命令填充一个长方体。单区体积须 ≤ {@link #FILL_COMMAND_MAX}。 */
     public static void fillViaCommand(BlockPos from, BlockPos to, BlockState state, String mode) {
         sendCommand(String.format("fill %d %d %d %d %d %d %s%s",
             from.getX(), from.getY(), from.getZ(),
             to.getX(), to.getY(), to.getZ(),
             toCommandString(state),
             mode == null || mode.isEmpty() ? "" : " " + mode));
+    }
+
+    /**
+     * 把大长方体切成体积 ≤ {@code limit} 的子块（优先沿最长轴切开），
+     * 以便多条 {@code /fill} 突破原版单次 32768 限制。
+     */
+    public static void forEachFillChunk(BlockPos min, BlockPos max, int limit,
+                                        BiConsumer<BlockPos, BlockPos> consumer) {
+        if (limit < 1) limit = FILL_COMMAND_MAX;
+        BlockPos a = min(min, max);
+        BlockPos b = max(min, max);
+        long volume = volumeOf(a, b);
+        if (volume <= limit) {
+            consumer.accept(a, b);
+            return;
+        }
+
+        int dx = b.getX() - a.getX() + 1;
+        int dy = b.getY() - a.getY() + 1;
+        int dz = b.getZ() - a.getZ() + 1;
+
+        // 选切片方向：尽量让「另外两维乘积」小，从而每片能切得更厚
+        int axis; // 0=X 1=Y 2=Z
+        long sliceArea;
+        if (dx >= dy && dx >= dz) {
+            axis = 0;
+            sliceArea = (long) dy * dz;
+        } else if (dz >= dy) {
+            axis = 2;
+            sliceArea = (long) dx * dy;
+        } else {
+            axis = 1;
+            sliceArea = (long) dx * dz;
+        }
+
+        int step = (int) Math.max(1L, Math.min(Integer.MAX_VALUE, limit / Math.max(1L, sliceArea)));
+        if (sliceArea > limit) {
+            // 单层仍超限：递归切另外的轴
+            if (axis == 0) {
+                for (int x = a.getX(); x <= b.getX(); x++) {
+                    forEachFillChunk(new BlockPos(x, a.getY(), a.getZ()),
+                        new BlockPos(x, b.getY(), b.getZ()), limit, consumer);
+                }
+            } else if (axis == 1) {
+                for (int y = a.getY(); y <= b.getY(); y++) {
+                    forEachFillChunk(new BlockPos(a.getX(), y, a.getZ()),
+                        new BlockPos(b.getX(), y, b.getZ()), limit, consumer);
+                }
+            } else {
+                for (int z = a.getZ(); z <= b.getZ(); z++) {
+                    forEachFillChunk(new BlockPos(a.getX(), a.getY(), z),
+                        new BlockPos(b.getX(), b.getY(), z), limit, consumer);
+                }
+            }
+            return;
+        }
+
+        if (axis == 0) {
+            for (int x = a.getX(); x <= b.getX(); x += step) {
+                int x1 = Math.min(x + step - 1, b.getX());
+                consumer.accept(new BlockPos(x, a.getY(), a.getZ()),
+                    new BlockPos(x1, b.getY(), b.getZ()));
+            }
+        } else if (axis == 1) {
+            for (int y = a.getY(); y <= b.getY(); y += step) {
+                int y1 = Math.min(y + step - 1, b.getY());
+                consumer.accept(new BlockPos(a.getX(), y, a.getZ()),
+                    new BlockPos(b.getX(), y1, b.getZ()));
+            }
+        } else {
+            for (int z = a.getZ(); z <= b.getZ(); z += step) {
+                int z1 = Math.min(z + step - 1, b.getZ());
+                consumer.accept(new BlockPos(a.getX(), a.getY(), z),
+                    new BlockPos(b.getX(), b.getY(), z1));
+            }
+        }
+    }
+
+    /** 估算需要多少条 fill 才能铺满该区。 */
+    public static int countFillChunks(BlockPos min, BlockPos max, int limit) {
+        int[] count = {0};
+        forEachFillChunk(min, max, limit, (a, b) -> count[0]++);
+        return count[0];
     }
 
     /**

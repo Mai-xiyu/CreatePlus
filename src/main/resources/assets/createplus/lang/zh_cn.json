@@ -3,7 +3,6 @@
   "itemGroup.createplus.spawn_eggs": "CreatePlus - 刷怪蛋",
   "itemGroup.createplus.player_inv": "玩家背包",
   "createplus.spawn_egg": "%s刷怪蛋",
-
   "key.categories.createplus": "CreatePlus",
   "key.createplus.toggle_hud": "快捷菜单",
   "key.createplus.toggle_modules": "功能面板",
@@ -14,7 +13,6 @@
   "key.createplus.undo": "撤销区域操作",
   "key.createplus.command_studio": "命令工作室",
   "key.createplus.hud_edit": "退出 HUD 编辑",
-
   "createplus.category.building": "建筑",
   "createplus.category.movement": "移动",
   "createplus.category.render": "视觉",
@@ -23,7 +21,6 @@
   "createplus.state.on": "开",
   "createplus.state.off": "关",
   "createplus.performance.button": "CreatePlus 性能优化",
-
   "feature.createplus.build_selection.name": "选区工具",
   "feature.createplus.build_selection.description": "手持选区棒左键设起点、右键设终点，选区被填充/复制/导出共用",
   "setting.createplus.build_selection.wand": "选区棒",
@@ -37,18 +34,15 @@
   "setting.createplus.build_selection.show_corners": "显示角点",
   "setting.createplus.build_selection.show_info": "显示尺寸",
   "setting.createplus.build_selection.box_color": "线框颜色",
-
   "feature.createplus.speed_build.name": "快速建造",
   "feature.createplus.speed_build.description": "移除放置方块的冷却，连续建造不卡手",
   "setting.createplus.speed_build.delay": "放置冷却",
   "setting.createplus.speed_build.delay.tooltip": "单位为游戏刻。0 表示完全没有冷却，原版是 4。",
-
   "feature.createplus.infinite_placement.name": "无限放置",
   "feature.createplus.infinite_placement.description": "创造模式下自动把手中物品补满，避免放到一半用光",
   "setting.createplus.infinite_placement.whole_hotbar": "补满整个快捷栏",
-
   "feature.createplus.area_fill.name": "区域填充",
-  "feature.createplus.area_fill.description": "用手中的方块填充选区，支持空心、墙壁、棱框与撤销",
+  "feature.createplus.area_fill.description": "用手中的方块填充选区；有 OP 时走 /fill，超 32768 自动分批",
   "setting.createplus.area_fill.mode": "填充模式",
   "setting.createplus.area_fill.mode.fill": "实心",
   "setting.createplus.area_fill.mode.hollow": "空心",
@@ -58,7 +52,8 @@
   "setting.createplus.area_fill.mode.clear": "清空",
   "setting.createplus.area_fill.per_tick": "每刻处理量",
   "setting.createplus.area_fill.per_tick.tooltip": "越大越快，但发包过猛可能被服务器踢下线。",
-
+  "setting.createplus.area_fill.max_volume": "体积上限",
+  "setting.createplus.area_fill.max_volume.tooltip": "单次填充/复制等操作最多影响多少格，最大一亿；超过 32768 会自动分批。",
   "feature.createplus.area_copy.name": "区域复制",
   "feature.createplus.area_copy.description": "复制选区里的建筑并粘贴到别处，可旋转与镜像",
   "setting.createplus.area_copy.anchor": "粘贴基准",
@@ -74,7 +69,6 @@
   "setting.createplus.area_copy.mirror.left_right": "左右翻转",
   "setting.createplus.area_copy.mirror.front_back": "前后翻转",
   "setting.createplus.area_copy.include_air": "包含空气",
-
   "feature.createplus.mirror_build.name": "对称建造",
   "feature.createplus.mirror_build.description": "放置方块时自动在镜像位置同步放置",
   "setting.createplus.mirror_build.axis": "对称轴",
@@ -83,7 +77,6 @@
   "setting.createplus.mirror_build.axis.both": "四向",
   "setting.createplus.mirror_build.show_plane": "显示镜像面",
   "setting.createplus.mirror_build.plane_color": "镜像面颜色",
-
   "feature.createplus.placement_restriction.name": "放置限制",
   "feature.createplus.placement_restriction.description": "按住右键连放时把方块锁在同一层、同一面或同一条线上",
   "setting.createplus.placement_restriction.mode": "限制方式",
@@ -95,7 +88,6 @@
   "setting.createplus.placement_restriction.mode.tooltip": "锚点是按住右键后放下的第一个方块，松开右键就重新取。",
   "setting.createplus.placement_restriction.show_anchor": "显示锚点",
   "setting.createplus.placement_restriction.anchor_color": "锚点颜色",
-
   "feature.createplus.shape_studio.name": "几何体工坊",
   "feature.createplus.shape_studio.description": "球体、圆环、螺旋、拱门等参数化几何体，带实时全息预览",
   "setting.createplus.shape_studio.shape": "形状",
@@ -120,7 +112,6 @@
   "setting.createplus.shape_studio.axis.z": "南北 (Z)",
   "setting.createplus.shape_studio.follow_crosshair": "预览跟随准星",
   "setting.createplus.shape_studio.preview_color": "预览颜色",
-
   "feature.createplus.curve_builder.name": "样条曲线",
   "feature.createplus.curve_builder.description": "点几个控制点连成平滑曲线，再铺成有粗细的管道",
   "setting.createplus.curve_builder.wand": "控制杖",
@@ -134,14 +125,12 @@
   "setting.createplus.curve_builder.closed": "闭合成环",
   "setting.createplus.curve_builder.show_points": "显示控制点",
   "setting.createplus.curve_builder.curve_color": "曲线颜色",
-
   "feature.createplus.paint_palette.name": "材质调色板",
   "feature.createplus.paint_palette.description": "用快捷栏里的多种方块按噪声混合上色，替代单一材质",
   "setting.createplus.paint_palette.patch_size": "斑块尺寸",
   "setting.createplus.paint_palette.patch_size.tooltip": "同种材质连成一片的大致直径，越小越碎。",
   "setting.createplus.paint_palette.seed": "随机种子",
   "setting.createplus.paint_palette.seed.tooltip": "换一个数字就是换一种斑块分布，形状不变。",
-
   "feature.createplus.area_place.name": "范围放置",
   "feature.createplus.area_place.description": "按住右键在准星周围铺开一片方块",
   "setting.createplus.area_place.shape": "笔刷形状",
@@ -153,7 +142,6 @@
   "setting.createplus.area_place.delay": "间隔",
   "setting.createplus.area_place.show_preview": "显示预览",
   "setting.createplus.area_place.use_offhand": "使用副手",
-
   "feature.createplus.nucker.name": "范围破坏",
   "feature.createplus.nucker.description": "按住左键破坏准星周围的方块",
   "setting.createplus.nucker.shape": "笔刷形状",
@@ -165,17 +153,14 @@
   "setting.createplus.nucker.delay": "间隔",
   "setting.createplus.nucker.show_preview": "显示预览",
   "setting.createplus.nucker.keep_floor": "保留脚下方块",
-
   "feature.createplus.block_color_swap.name": "方块变色",
   "feature.createplus.block_color_swap.description": "按住修饰键滚轮，在同类方块之间切换颜色与材质",
   "setting.createplus.block_color_swap.play_sound": "播放音效",
   "setting.createplus.block_color_swap.show_name": "显示名称",
-
   "feature.createplus.building_export.name": "建筑导出",
   "feature.createplus.building_export.description": "把选区导出成 .mcfunction 文件，也能再导入回来",
   "setting.createplus.building_export.include_air": "包含空气",
   "setting.createplus.building_export.relative_coords": "使用相对坐标",
-
   "feature.createplus.scaffold.name": "自动铺路",
   "feature.createplus.scaffold.description": "自动在脚下放置方块，悬空也能走",
   "setting.createplus.scaffold.mode": "触发方式",
@@ -185,14 +170,12 @@
   "setting.createplus.scaffold.tower": "搭塔",
   "setting.createplus.scaffold.tower.tooltip": "按住跳跃时垂直上升，配合脚下铺方块搭高塔。",
   "setting.createplus.scaffold.while_flying": "飞行时也生效",
-
   "feature.createplus.improved_flight.name": "飞行手感",
   "feature.createplus.improved_flight.description": "创造飞行松手立刻停住，可调垂直加速",
   "setting.createplus.improved_flight.instant_stop": "立即停止",
   "setting.createplus.improved_flight.drag": "保留惯性",
   "setting.createplus.improved_flight.drag.tooltip": "松手后每刻保留的水平速度比例，0 = 立刻停住。",
   "setting.createplus.improved_flight.vertical_boost": "垂直加速",
-
   "feature.createplus.speed_adjust.name": "速度调整",
   "feature.createplus.speed_adjust.description": "自定义行走、飞行、游泳、鞘翅与骑乘速度",
   "setting.createplus.speed_adjust.walk": "行走",
@@ -200,24 +183,20 @@
   "setting.createplus.speed_adjust.swim": "游泳",
   "setting.createplus.speed_adjust.elytra": "鞘翅",
   "setting.createplus.speed_adjust.ride": "骑乘",
-
   "feature.createplus.extended_reach.name": "超远交互",
   "feature.createplus.extended_reach.description": "加长方块与实体的交互距离（需创造；本机主机同步服务端属性）",
   "setting.createplus.extended_reach.block_bonus": "方块距离加成",
   "setting.createplus.extended_reach.entity_bonus": "实体距离加成",
-
   "feature.createplus.noclip.name": "穿墙",
   "feature.createplus.noclip.description": "忽略方块碰撞（需创造；本机主机与多人服均尽量生效）",
   "setting.createplus.noclip.speed": "移动倍率",
   "setting.createplus.noclip.keep_flying": "保持飞行",
   "setting.createplus.noclip.ignore_rubberband": "忽略服务端拉回",
   "setting.createplus.noclip.ignore_rubberband.tooltip": "远端多人服丢掉拉回包并持续上报坐标。严格反作弊可能踢人。",
-
   "feature.createplus.spinbot.name": "陀螺旋转",
   "feature.createplus.spinbot.description": "让服务端看到的角色持续旋转，本地视角不受影响",
   "setting.createplus.spinbot.degrees_per_tick": "每刻角度",
   "setting.createplus.spinbot.rotate_body": "同步身体朝向",
-
   "feature.createplus.snap_aim.name": "视角吸附",
   "feature.createplus.snap_aim.description": "把视角吸附到固定角度，摆放带朝向的方块时不会歪",
   "setting.createplus.snap_aim.yaw_step": "水平步长",
@@ -225,26 +204,22 @@
   "setting.createplus.snap_aim.snap_pitch": "吸附俯仰角",
   "setting.createplus.snap_aim.pitch_step": "俯仰步长",
   "setting.createplus.snap_aim.free_while_sneaking": "潜行时自由转视角",
-
   "feature.createplus.freecam.name": "灵魂出窍",
   "feature.createplus.freecam.description": "镜头脱离身体自由观察，身体留在原地",
   "setting.createplus.freecam.fly_speed": "飞行速度",
   "setting.createplus.freecam.show_body": "显示身体位置",
   "setting.createplus.freecam.scroll_to_adjust": "滚轮调速",
-
   "feature.createplus.zoom.name": "视角缩放",
   "feature.createplus.zoom.description": "按住缩放键放大视角，滚轮调节倍率",
   "setting.createplus.zoom.level": "缩放倍率",
   "setting.createplus.zoom.smooth": "平滑过渡",
   "setting.createplus.zoom.smooth_speed": "过渡速度",
   "setting.createplus.zoom.scroll_to_adjust": "滚轮调节倍率",
-
   "feature.createplus.gamma_override.name": "夜视",
   "feature.createplus.gamma_override.description": "大幅提高画面亮度，亮度可调",
   "setting.createplus.gamma_override.brightness": "亮度",
   "setting.createplus.gamma_override.brightness.tooltip": "原版最大为 1.0，这里可以推到 20。",
   "setting.createplus.gamma_override.night_vision_effect": "附加夜视效果",
-
   "feature.createplus.chunk_borders.name": "区块边界",
   "feature.createplus.chunk_borders.description": "显示区块边界、子区块分层与 4x4 网格",
   "setting.createplus.chunk_borders.radius": "显示半径",
@@ -253,7 +228,6 @@
   "setting.createplus.chunk_borders.grid": "4x4 网格",
   "setting.createplus.chunk_borders.color": "主色",
   "setting.createplus.chunk_borders.sub_color": "辅助色",
-
   "feature.createplus.light_overlay.name": "光照覆盖",
   "feature.createplus.light_overlay.description": "标出能刷怪的方块，方便补光",
   "setting.createplus.light_overlay.radius": "水平范围",
@@ -263,7 +237,6 @@
   "setting.createplus.light_overlay.show_night_only": "显示仅夜间可刷",
   "setting.createplus.light_overlay.always_color": "始终可刷颜色",
   "setting.createplus.light_overlay.night_color": "夜间可刷颜色",
-
   "feature.createplus.time_weather.name": "时间天气",
   "feature.createplus.time_weather.description": "本地覆盖时间与天气，只影响自己看到的画面",
   "setting.createplus.time_weather.freeze_time": "固定时间",
@@ -273,7 +246,6 @@
   "setting.createplus.time_weather.weather.clear": "晴天",
   "setting.createplus.time_weather.weather.rain": "下雨",
   "setting.createplus.time_weather.weather.thunder": "雷暴",
-
   "feature.createplus.mini_hud.name": "信息面板",
   "feature.createplus.mini_hud.description": "在屏幕角落显示坐标、区块、群系等信息",
   "setting.createplus.mini_hud.corner": "显示位置",
@@ -302,18 +274,14 @@
   "setting.createplus.mini_hud.show_entities": "实体数量",
   "setting.createplus.mini_hud.hud_opacity": "HUD 透明度",
   "setting.createplus.mini_hud.hud_opacity.tooltip": "信息面板与 F9 快捷菜单的整体透明度",
-
   "feature.createplus.hud_editor.name": "HUD 编辑",
   "feature.createplus.hud_editor.description": "开启后进入 HUD 布局编辑；拖动面板避免重叠，仅 F8 可退出",
-
   "createplus.hud_edit.title": "HUD 编辑模式",
   "createplus.hud_edit.hint_f8": "拖动面板调整位置 · 右键重置 · 按 F8 退出",
   "createplus.hud_edit.panel.mini_hud": "信息面板",
   "createplus.hud_edit.panel.block_info": "方块信息",
   "createplus.hud_edit.panel.ping": "Ping",
   "createplus.hud_edit.panel.scoreboard": "记分板",
-
-
   "feature.createplus.block_info.name": "方块信息",
   "feature.createplus.block_info.description": "显示准星所指方块的 id、方块状态与光照",
   "setting.createplus.block_info.corner": "显示位置",
@@ -335,38 +303,30 @@
   "setting.createplus.block_info.background_color": "背景颜色",
   "setting.createplus.block_info.label_color": "标签颜色",
   "setting.createplus.block_info.value_color": "数值颜色",
-
   "feature.createplus.ping_display.name": "延迟显示",
   "feature.createplus.ping_display.description": "在玩家名牌与屏幕上显示网络延迟",
   "setting.createplus.ping_display.name_tags": "显示在名牌上",
   "setting.createplus.ping_display.own_ping": "显示自己的延迟",
   "setting.createplus.ping_display.good_threshold": "良好阈值",
   "setting.createplus.ping_display.bad_threshold": "较差阈值",
-
   "feature.createplus.state_clipboard.name": "状态剪贴板",
   "feature.createplus.state_clipboard.description": "复制/粘贴方块状态（朝向、含水等，需创造）",
   "setting.createplus.state_clipboard.apply_on_place": "放置时自动粘贴",
-
   "feature.createplus.hotbar_random.name": "快捷栏随机",
   "feature.createplus.hotbar_random.description": "连放时从快捷栏随机抽方块（需创造）",
   "setting.createplus.hotbar_random.only_while_using": "仅按住使用键时",
-
   "feature.createplus.look_replace.name": "准星替换",
   "feature.createplus.look_replace.description": "Ctrl+左键用手上的方块替换准星方块（需创造）",
   "setting.createplus.look_replace.require_modifier": "需要修饰键",
-
   "feature.createplus.flood_fill.name": "洪水填充",
   "feature.createplus.flood_fill.description": "洪水填充相连的同种方块（需创造）",
   "setting.createplus.flood_fill.max_blocks": "填充上限",
-
   "feature.createplus.air_place.name": "空气放置",
   "feature.createplus.air_place.description": "对着空气也能放方块（需创造）",
   "setting.createplus.air_place.reach": "放置距离",
-
   "feature.createplus.measure_ruler.name": "量尺",
   "feature.createplus.measure_ruler.description": "两点测距与体积（需创造）",
   "setting.createplus.measure_ruler.color": "量尺颜色",
-
   "feature.createplus.layer_slice.name": "层切面",
   "feature.createplus.layer_slice.description": "按 Y 层锁定建造，带层平面预览（需创造）",
   "setting.createplus.layer_slice.mode": "模式",
@@ -377,7 +337,6 @@
   "setting.createplus.layer_slice.thickness": "厚度",
   "setting.createplus.layer_slice.plane_size": "平面大小",
   "setting.createplus.layer_slice.plane_color": "平面颜色",
-
   "feature.createplus.waypoints.name": "航点轨迹",
   "feature.createplus.waypoints.description": "航点光柱与自动面包屑轨迹（需创造）",
   "setting.createplus.waypoints.max_points": "最大点数",
@@ -385,27 +344,21 @@
   "setting.createplus.waypoints.auto_interval.tooltip": "0 = 关闭自动撒点，只保留手动航点。",
   "setting.createplus.waypoints.color": "轨迹颜色",
   "setting.createplus.waypoints.beam_color": "光柱颜色",
-
   "feature.createplus.step_assist.name": "自动上台阶",
   "feature.createplus.step_assist.description": "自动跨上整格台阶（需创造）",
   "setting.createplus.step_assist.height": "跨步高度",
-
   "feature.createplus.fast_break.name": "快速破坏",
   "feature.createplus.fast_break.description": "创造模式瞬间挖掉方块（需创造）",
-
   "feature.createplus.auto_pick.name": "精确拾取",
   "feature.createplus.auto_pick.description": "中键拾取完整方块状态与 NBT（需创造）",
   "setting.createplus.auto_pick.copy_nbt": "复制方块实体 NBT",
-
   "feature.createplus.camera_clip.name": "镜头穿墙",
   "feature.createplus.camera_clip.description": "第三人称镜头穿过方块（需创造）",
-
   "feature.createplus.storage_esp.name": "容器透视",
   "feature.createplus.storage_esp.description": "隔墙显示附近箱子等容器（需创造）",
   "setting.createplus.storage_esp.range": "扫描范围",
   "setting.createplus.storage_esp.refresh_ticks": "刷新间隔",
   "setting.createplus.storage_esp.color": "外框颜色",
-
   "feature.createplus.anti_overlay.name": "清障",
   "feature.createplus.anti_overlay.description": "清除失明/黑暗等遮罩，可选夜视（需创造）",
   "setting.createplus.anti_overlay.clear_blindness": "清除失明",
@@ -413,17 +366,14 @@
   "setting.createplus.anti_overlay.clear_nausea": "清除反胃",
   "setting.createplus.anti_overlay.clear_wither": "清除凋零",
   "setting.createplus.anti_overlay.night_vision": "给予夜视",
-
   "feature.createplus.auto_bridge.name": "自动搭路",
   "feature.createplus.auto_bridge.description": "走路时自动在脚下续方块（需创造）",
   "setting.createplus.auto_bridge.only_when_moving": "仅移动时",
   "setting.createplus.auto_bridge.require_sneak": "需要潜行",
-
   "feature.createplus.liquid_walk.name": "液面行走",
   "feature.createplus.liquid_walk.description": "在水面与岩浆上行走（需创造）",
   "setting.createplus.liquid_walk.water": "水面",
   "setting.createplus.liquid_walk.lava": "岩浆",
-
   "feature.createplus.performance.name": "性能优化",
   "feature.createplus.performance.description": "一组渲染开关，用来在大型存档里换取帧数（含 Graphene 风格优化）",
   "setting.createplus.performance.disable_particles": "关闭所有粒子",
@@ -442,7 +392,6 @@
   "setting.createplus.performance.inactive_fps_limit": "失焦限帧",
   "setting.createplus.performance.inactive_fps": "失焦 FPS 上限",
   "setting.createplus.performance.bamboo_full_bright": "竹子全亮着色",
-
   "feature.createplus.command_studio.name": "命令工作室",
   "feature.createplus.command_studio.description": "AI 生成指令/OOC 与 NBT 补全（纯客户端，不自动执行）",
   "setting.createplus.command_studio.nbt_autocomplete": "NBT 键补全",
@@ -450,7 +399,6 @@
   "setting.createplus.command_studio.ai_model": "AI 模型",
   "setting.createplus.command_studio.ai_api_key": "AI API Key",
   "setting.createplus.command_studio.ai_timeout_sec": "AI 超时(秒)",
-
   "createplus.command_studio.title": "CreatePlus 命令工作室",
   "createplus.command_studio.validate": "校验",
   "createplus.command_studio.copy": "复制指令",
@@ -462,19 +410,17 @@
   "createplus.command_studio.mode.command": "普通指令",
   "createplus.command_studio.mode.ooc": "OOC",
   "createplus.command_studio.mode.both": "指令+OOC",
-
   "createplus.hud_edit.panel.health": "血量/盔甲/饥饿",
   "createplus.hud_edit.panel.hotbar": "快捷栏",
   "createplus.hud_edit.panel.experience": "经验条",
   "createplus.hud_edit.panel.boss_bar": "Boss 栏",
   "createplus.hud_edit.panel.effects": "状态效果",
-
   "feature.createplus.map_art.name": "地图画",
-  "feature.createplus.map_art.description": "选图片生成 filled_map 地图画，写入已保存的快捷栏（单人/多人客户端均可）",
-  "createplus.map_art.title": "CreatePlus 地图画",
-  "createplus.map_art.hint": "选图 → 调几乘几/等级 → 生成；可自动放置墙+展示框+地图",
+  "feature.createplus.map_art.description": "地图画（高清）与方块像素画（全局可见备用）",
+  "createplus.map_art.title": "CreatePlus 地图 / 像素画",
+  "createplus.map_art.hint": "顶部切换模式",
   "createplus.map_art.pick": "选图",
-  "createplus.map_art.pick_title": "选择地图画图片",
+  "createplus.map_art.pick_title": "选择图片",
   "createplus.map_art.path_hint": "也可粘贴图片完整路径…",
   "createplus.map_art.cols": "宽(张)",
   "createplus.map_art.rows": "高(张)",
@@ -484,5 +430,15 @@
   "createplus.map_art.single": "单张 1×1",
   "createplus.map_art.generate": "生成并写入",
   "createplus.map_art.clear": "清空地图画",
-  "createplus.map_art.place": "自动放置"
+  "createplus.map_art.place": "自动放置地图",
+  "createplus.map_art.hint_map": "地图画：生成 filled_map → 快捷栏 / 展示框（非房主联机仅自己可见）",
+  "createplus.map_art.hint_block": "方块像素画：关锁比例可自由改宽高（最大 512×512）；侧面竖放 / 点地板或天花板平铺；全局可见",
+  "createplus.map_art.mode": "模式",
+  "createplus.map_art.block_w": "宽(格)",
+  "createplus.map_art.block_h": "高(格)",
+  "createplus.map_art.palette": "方块",
+  "createplus.map_art.dither": "抖动",
+  "createplus.map_art.lock_aspect": "锁比例",
+  "createplus.map_art.suggest": "自动建议",
+  "createplus.map_art.place_blocks": "量化并放置"
 }

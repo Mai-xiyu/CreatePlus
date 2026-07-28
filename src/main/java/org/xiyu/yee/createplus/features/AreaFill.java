@@ -16,7 +16,8 @@ import org.xiyu.yee.createplus.utils.Selection;
 /**
  * 用手中的方块填充选区，附带撤销。
  *
- * 这是"选区工具"之后最常用的一步：Litematica / WorldEdit 的 //set 与 //walls。
+ * 有 OP 时优先走原版 {@code /fill}（清空 / 实心 / 空心 / 补空气 / 墙 / 棱），
+ * 超过 32768 自动切成多批；无权限或调色板模式再退回逐格 EditQueue。
  */
 public class AreaFill extends CreativePlusFeature {
 
@@ -37,10 +38,16 @@ public class AreaFill extends CreativePlusFeature {
 
     private final EnumSetting<Mode> mode = enumSetting("mode", Mode.FILL);
     private final IntSetting perTick = intSetting("per_tick", 64, 4, 512);
+    /** 单次操作方块数上限，默认一亿；改完会同步到全局批量编辑。 */
+    private final IntSetting maxVolume = intSetting("max_volume",
+        BlockEdits.DEFAULT_MAX_VOLUME, BlockEdits.FILL_COMMAND_MAX, BlockEdits.ABSOLUTE_MAX_VOLUME,
+        1_000_000, "");
 
     public AreaFill() {
         super("area_fill", "用手中的方块填充选区，支持空心/墙壁/棱框与撤销", Category.BUILDING);
         perTick.onChange(EditQueue::setPerTick);
+        maxVolume.onChange(BlockEdits::setMaxVolume);
+        BlockEdits.setMaxVolume(maxVolume.value());
     }
 
     @Override
@@ -58,6 +65,15 @@ public class AreaFill extends CreativePlusFeature {
         mode.set(value);
     }
 
+    /** 同步设置项与全局上限（命令 / GUI 共用）。 */
+    public void setMaxVolumeLimit(int value) {
+        maxVolume.set(value);
+    }
+
+    public int getMaxVolumeLimit() {
+        return maxVolume.value();
+    }
+
     /** 按键触发的填充。 */
     public void fillFromKeybind() {
         fill(mode.get());
@@ -68,7 +84,7 @@ public class AreaFill extends CreativePlusFeature {
         if (mc.level == null || mc.player == null) return;
 
         if (EditQueue.isBusy()) {
-            notifyActionBar("§c上一次操作还没做完，剩余 " + EditQueue.remaining() + " 个方块");
+            notifyActionBar("§c上一次操作还没做完，剩余 " + EditQueue.remaining() + " 个任务");
             return;
         }
 
@@ -87,19 +103,209 @@ public class AreaFill extends CreativePlusFeature {
         BlockPos min = selection.getMin();
         BlockPos max = selection.getMax();
         long volume = selection.volume();
-        if (volume > BlockEdits.MAX_VOLUME) {
-            notifyActionBar("§c选区太大了（" + volume + " > " + BlockEdits.MAX_VOLUME + "）");
+        if (volume > BlockEdits.maxVolume()) {
+            notifyActionBar("§c选区太大了（" + volume + " > " + BlockEdits.maxVolume() + "）");
             return;
         }
 
-        // 调色板要逐格算材质，用不了单条 fill
         PaintPalette palette = PaintPalette.active();
-        // 有权限而且是最简单的整体填充时，一条 fill 命令就够，比逐格发包快几个数量级
-        boolean singleCommand = fillMode == Mode.FILL && palette == null && BlockEdits.canUseCommands();
+        boolean canCommand = palette == null && BlockEdits.canUseCommands();
 
-        EditHistory.Step step = EditHistory.begin(label(fillMode));
+        if (canCommand && tryFillViaCommands(fillMode, min, max, target, volume, mc)) {
+            return;
+        }
+
+        fillViaQueue(fillMode, min, max, target, palette, mc);
+    }
+
+    /**
+     * OP + 无调色板：用 /fill 分批执行。成功排队返回 true。
+     */
+    private boolean tryFillViaCommands(Mode fillMode, BlockPos min, BlockPos max,
+                                       BlockState target, long volume, Minecraft mc) {
+        return switch (fillMode) {
+            case FILL, CLEAR -> {
+                enqueueFillChunks(min, max, target, null, label(fillMode), volume, mc);
+                yield true;
+            }
+            case REPLACE_AIR -> {
+                enqueueFillChunks(min, max, target, "replace minecraft:air",
+                    label(fillMode), volume, mc);
+                yield true;
+            }
+            case HOLLOW -> {
+                enqueueHollow(min, max, target, volume, mc);
+                yield true;
+            }
+            case WALLS -> {
+                enqueueWalls(min, max, target, volume, mc);
+                yield true;
+            }
+            case FRAME -> {
+                enqueueFrame(min, max, target, volume, mc);
+                yield true;
+            }
+        };
+    }
+
+    private void enqueueFillChunks(BlockPos min, BlockPos max, BlockState target,
+                                   String fillMode, String label, long volume, Minecraft mc) {
+        maybeRecordHistory(label, min, max, volume, mc, (pos, a, b) -> true);
+
+        EditQueue.start(label);
+        int[] batches = {0};
+        BlockEdits.forEachFillChunk(min, max, BlockEdits.FILL_COMMAND_MAX, (from, to) -> {
+            EditQueue.enqueueFill(from, to, target, fillMode);
+            batches[0]++;
+        });
+
+        if (batches[0] > 1) {
+            notifyActionBar("§a" + label + " §7分 §f" + batches[0] + " §7批 fill（共 " + volume + " 格）");
+        } else {
+            notifyActionBar("§a" + label + " §7已提交 fill（" + volume + " 格）");
+        }
+    }
+
+    /** 大空心：整区实心 fill + 内部空气 fill；小区直接 hollow。 */
+    private void enqueueHollow(BlockPos min, BlockPos max, BlockState target,
+                               long volume, Minecraft mc) {
+        maybeRecordHistory(label(Mode.HOLLOW), min, max, volume, mc,
+            (pos, a, b) -> true);
+
+        EditQueue.start(label(Mode.HOLLOW));
+        if (volume <= BlockEdits.FILL_COMMAND_MAX) {
+            EditQueue.enqueueFill(min, max, target, "hollow");
+            notifyActionBar("§a空心填充 §7已提交 fill hollow（" + volume + " 格）");
+            return;
+        }
+
+        BlockEdits.forEachFillChunk(min, max, BlockEdits.FILL_COMMAND_MAX,
+            (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+
+        int dx = max.getX() - min.getX();
+        int dy = max.getY() - min.getY();
+        int dz = max.getZ() - min.getZ();
+        if (dx >= 2 && dy >= 2 && dz >= 2) {
+            BlockPos innerMin = min.offset(1, 1, 1);
+            BlockPos innerMax = max.offset(-1, -1, -1);
+            BlockState air = Blocks.AIR.defaultBlockState();
+            BlockEdits.forEachFillChunk(innerMin, innerMax, BlockEdits.FILL_COMMAND_MAX,
+                (from, to) -> EditQueue.enqueueFill(from, to, air, null));
+        }
+        notifyActionBar("§a空心填充 §7分批 fill（共 " + volume + " 格）");
+    }
+
+    private void enqueueWalls(BlockPos min, BlockPos max, BlockState target,
+                              long volume, Minecraft mc) {
+        maybeRecordHistory(label(Mode.WALLS), min, max, volume, mc,
+            (pos, a, b) -> includes(Mode.WALLS, pos, a, b, mc));
+
+        EditQueue.start(label(Mode.WALLS));
+        // 南北墙（完整 X/Y）
+        BlockEdits.forEachFillChunk(
+            new BlockPos(min.getX(), min.getY(), min.getZ()),
+            new BlockPos(max.getX(), max.getY(), min.getZ()),
+            BlockEdits.FILL_COMMAND_MAX,
+            (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+        if (max.getZ() != min.getZ()) {
+            BlockEdits.forEachFillChunk(
+                new BlockPos(min.getX(), min.getY(), max.getZ()),
+                new BlockPos(max.getX(), max.getY(), max.getZ()),
+                BlockEdits.FILL_COMMAND_MAX,
+                (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+        }
+        // 东西墙（避开已填的南北棱，z 收一格）
+        if (max.getZ() - min.getZ() >= 2) {
+            BlockEdits.forEachFillChunk(
+                new BlockPos(min.getX(), min.getY(), min.getZ() + 1),
+                new BlockPos(min.getX(), max.getY(), max.getZ() - 1),
+                BlockEdits.FILL_COMMAND_MAX,
+                (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+            if (max.getX() != min.getX()) {
+                BlockEdits.forEachFillChunk(
+                    new BlockPos(max.getX(), min.getY(), min.getZ() + 1),
+                    new BlockPos(max.getX(), max.getY(), max.getZ() - 1),
+                    BlockEdits.FILL_COMMAND_MAX,
+                    (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+            }
+        }
+        notifyActionBar("§a墙壁 §7已提交分批 fill");
+    }
+
+    private void enqueueFrame(BlockPos min, BlockPos max, BlockState target,
+                              long volume, Minecraft mc) {
+        maybeRecordHistory(label(Mode.FRAME), min, max, volume, mc,
+            (pos, a, b) -> includes(Mode.FRAME, pos, a, b, mc));
+
+        EditQueue.start(label(Mode.FRAME));
+        int x0 = min.getX(), x1 = max.getX();
+        int y0 = min.getY(), y1 = max.getY();
+        int z0 = min.getZ(), z1 = max.getZ();
+
+        // 底面 4 棱 + 顶面 4 棱 + 竖棱 4 条
+        enqueueEdge(x0, y0, z0, x1, y0, z0, target);
+        enqueueEdge(x0, y0, z1, x1, y0, z1, target);
+        enqueueEdge(x0, y0, z0, x0, y0, z1, target);
+        enqueueEdge(x1, y0, z0, x1, y0, z1, target);
+
+        enqueueEdge(x0, y1, z0, x1, y1, z0, target);
+        enqueueEdge(x0, y1, z1, x1, y1, z1, target);
+        enqueueEdge(x0, y1, z0, x0, y1, z1, target);
+        enqueueEdge(x1, y1, z0, x1, y1, z1, target);
+
+        if (y1 != y0) {
+            enqueueEdge(x0, y0, z0, x0, y1, z0, target);
+            enqueueEdge(x1, y0, z0, x1, y1, z0, target);
+            enqueueEdge(x0, y0, z1, x0, y1, z1, target);
+            enqueueEdge(x1, y0, z1, x1, y1, z1, target);
+        }
+        notifyActionBar("§a棱框 §7已提交 fill");
+    }
+
+    private static void enqueueEdge(int x0, int y0, int z0, int x1, int y1, int z1, BlockState target) {
+        BlockEdits.forEachFillChunk(
+            new BlockPos(x0, y0, z0), new BlockPos(x1, y1, z1),
+            BlockEdits.FILL_COMMAND_MAX,
+            (from, to) -> EditQueue.enqueueFill(from, to, target, null));
+    }
+
+    @FunctionalInterface
+    private interface PosFilter {
+        boolean test(BlockPos pos, BlockPos min, BlockPos max);
+    }
+
+    private void maybeRecordHistory(String label, BlockPos min, BlockPos max,
+                                    long volume, Minecraft mc, PosFilter filter) {
+        if (volume > BlockEdits.HISTORY_VOLUME) {
+            notifyPlayer("§7选区超过 " + BlockEdits.HISTORY_VOLUME
+                + " 格，本次不记录撤销快照（仍可用手动还原）");
+            return;
+        }
+        EditHistory.Step step = EditHistory.begin(label);
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int y = min.getY(); y <= max.getY(); y++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+                    if (!filter.test(pos, min, max)) continue;
+                    step.record(pos, mc.level.getBlockState(pos));
+                }
+            }
+        }
+        EditHistory.commit(step);
+    }
+
+    private void fillViaQueue(Mode fillMode, BlockPos min, BlockPos max,
+                              BlockState target, PaintPalette palette, Minecraft mc) {
+        EditHistory.Step step = null;
+        long plannedEstimate = BlockEdits.volumeOf(min, max);
+        boolean record = plannedEstimate <= BlockEdits.HISTORY_VOLUME;
+        if (record) {
+            step = EditHistory.begin(label(fillMode));
+        } else {
+            notifyPlayer("§7选区较大，本次不记录撤销快照");
+        }
+
         EditQueue.start(label(fillMode));
-
         int planned = 0;
         for (int x = min.getX(); x <= max.getX(); x++) {
             for (int y = min.getY(); y <= max.getY(); y++) {
@@ -107,29 +313,28 @@ public class AreaFill extends CreativePlusFeature {
                     BlockPos pos = new BlockPos(x, y, z);
                     if (!includes(fillMode, pos, min, max, mc)) continue;
 
-                    step.record(pos, mc.level.getBlockState(pos));
-                    planned++;
-                    if (!singleCommand) {
-                        EditQueue.enqueue(pos,
-                            palette == null || fillMode == Mode.CLEAR
-                                ? target
-                                : palette.pick(pos, target));
+                    if (step != null) {
+                        step.record(pos, mc.level.getBlockState(pos));
                     }
+                    planned++;
+                    EditQueue.enqueue(pos,
+                        palette == null || fillMode == Mode.CLEAR
+                            ? target
+                            : palette.pick(pos, target));
                 }
             }
         }
 
         if (planned == 0) {
+            EditQueue.start("");
             notifyActionBar("§7没有需要修改的方块");
             return;
         }
 
-        EditHistory.commit(step);
-
-        if (singleCommand) {
-            BlockEdits.fillViaCommand(min, max, target, null);
-            notifyActionBar("§a" + label(fillMode) + " 完成 §f" + planned + " §7个方块");
+        if (step != null) {
+            EditHistory.commit(step);
         }
+        notifyActionBar("§a" + label(fillMode) + " §7排队 §f" + planned + " §7格");
     }
 
     /** 撤销最近一次区域操作。 */
@@ -196,6 +401,8 @@ public class AreaFill extends CreativePlusFeature {
         Selection selection = Selection.shared();
         text.append("\n§7模式: §f").append(mode.getDisplayValue());
         text.append("\n§7选区: §f").append(selection.isComplete() ? selection.describe() : "未选择");
+        text.append("\n§7上限: §f").append(BlockEdits.maxVolume())
+            .append(" §7（fill 单批 ").append(BlockEdits.FILL_COMMAND_MAX).append("）");
         text.append("\n§7可撤销步数: §f").append(EditHistory.depth());
         if (PaintPalette.active() != null) {
             text.append("\n§a调色板生效中，将按噪声混合材质");

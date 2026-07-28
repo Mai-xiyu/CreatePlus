@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.xiyu.yee.createplus.mapart.MapArtStore;
 
 /**
- * 多人客户端地图数据只存在内存里；缺失时从本地缓存补回，避免重进世界后地图空白。
+ * 本机生成的 filled_map 若缓存里有像素，缺失时补回（仅自己客户端显示用地图）。
  */
 @Mixin(MapItem.class)
 public class MapItemMixin {
@@ -20,7 +20,7 @@ public class MapItemMixin {
         method = "getSavedData(Ljava/lang/Integer;Lnet/minecraft/world/level/Level;)Lnet/minecraft/world/level/saveddata/maps/MapItemSavedData;",
         at = @At("RETURN"),
         cancellable = true)
-    private static void createplus$reinjectMissing(
+    private static void createplus$fromLocalCache(
         Integer mapId, Level level, CallbackInfoReturnable<MapItemSavedData> cir) {
         if (cir.getReturnValue() != null || mapId == null || !(level instanceof ClientLevel client)) return;
         if (!MapArtStore.isOurId(mapId)) return;

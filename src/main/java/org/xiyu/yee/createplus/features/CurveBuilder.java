@@ -184,7 +184,7 @@ public class CurveBuilder extends CreativePlusFeature implements WorldRenderFeat
         List<BlockPos> voxels = Geometry.tube(path, thickness.value() - 0.5D);
         if (voxels.isEmpty()) {
             hologram.clear();
-            notifyActionBar("§c曲线太粗了（上限 " + BlockEdits.MAX_VOLUME
+            notifyActionBar("§c曲线太粗了（上限 " + BlockEdits.maxVolume()
                 + " 个体素），减小粗细或缩短路径");
             return;
         }
@@ -214,7 +214,7 @@ public class CurveBuilder extends CreativePlusFeature implements WorldRenderFeat
 
         int placed = hologram.commit(BlockPos.ZERO, "生成曲线", material);
         if (placed < 0) {
-            notifyActionBar("§c曲线太粗了（" + hologram.size() + " > " + BlockEdits.MAX_VOLUME + "）");
+            notifyActionBar("§c曲线太粗了（" + hologram.size() + " > " + BlockEdits.maxVolume() + "）");
             return false;
         }
 

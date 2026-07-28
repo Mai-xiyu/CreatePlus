@@ -172,7 +172,7 @@ public final class Hologram {
     public int commit(BlockPos anchor, String label, BlockState fallback) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || offsets.isEmpty()) return 0;
-        if (offsets.size() > BlockEdits.MAX_VOLUME) return -1;
+        if (offsets.size() > BlockEdits.maxVolume()) return -1;
 
         PaintPalette palette = PaintPalette.active();
         EditHistory.Step step = EditHistory.begin(label);

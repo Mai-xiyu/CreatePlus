@@ -152,7 +152,7 @@ public class ShapeStudio extends CreativePlusFeature implements WorldRenderFeatu
             hologram.clear();
             if (!overflow) {
                 overflow = true;
-                notifyActionBar("§c形状太大了（上限 " + BlockEdits.MAX_VOLUME
+                notifyActionBar("§c形状太大了（上限 " + BlockEdits.maxVolume()
                     + " 个体素），缩小半径或改成空心");
             }
             return;
@@ -214,7 +214,7 @@ public class ShapeStudio extends CreativePlusFeature implements WorldRenderFeatu
 
         int placed = hologram.commit(anchor, "生成" + shape.getDisplayValue(), material);
         if (placed < 0) {
-            notifyActionBar("§c形状太大了（" + hologram.size() + " > " + BlockEdits.MAX_VOLUME + "）");
+            notifyActionBar("§c形状太大了（" + hologram.size() + " > " + BlockEdits.maxVolume() + "）");
             return false;
         }
 

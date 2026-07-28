@@ -91,6 +91,7 @@ public final class CreatePlusClient {
         FreecamAPI.reset();
         welcomeCountdown = -1;
         mapArtReinjectCountdown = -1;
+        org.xiyu.yee.createplus.mapart.MapArtStore.clearApplied();
     }
 
     // === 每 tick ===
@@ -103,6 +104,7 @@ public final class CreatePlusClient {
         EditQueue.tick();
         BuildingImport.tick();
         org.xiyu.yee.createplus.mapart.MapArtPlacer.tick();
+        org.xiyu.yee.createplus.mapart.BlockPixelPlacer.tick();
 
         if (welcomeCountdown > 0 && --welcomeCountdown == 0) {
             WelcomeMessage.send();

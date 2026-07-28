@@ -37,8 +37,30 @@ public final class MapArtStore {
 
     private static final AtomicInteger NEXT = new AtomicInteger(0);
     private static final Map<Integer, byte[]> CACHE = new LinkedHashMap<>();
+    private static final java.util.Set<Integer> APPLIED = new java.util.HashSet<>();
 
     private MapArtStore() {
+    }
+
+    public static int parseMapKey(String mapKey) {
+        if (mapKey == null || !mapKey.startsWith("map_")) return -1;
+        try {
+            return Integer.parseInt(mapKey.substring(4));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    public static void markApplied(int mapId) {
+        APPLIED.add(mapId);
+    }
+
+    public static boolean isApplied(int mapId) {
+        return APPLIED.contains(mapId);
+    }
+
+    public static void clearApplied() {
+        APPLIED.clear();
     }
 
     public static boolean isOurId(int mapId) {
@@ -83,6 +105,7 @@ public final class MapArtStore {
         }
         client.overrideMapData(MapItem.makeKey(mapId), data);
         putColors(mapId, colors);
+        markApplied(mapId);
     }
 
     public static void injectFromStack(ItemStack stack, ClientLevel level) {
@@ -141,7 +164,7 @@ public final class MapArtStore {
         tag.putInt("map", mapId);
         tag.putBoolean(TAG_FLAG, true);
         tag.putByte(TAG_SCALE, (byte) Math.max(0, Math.min(4, scale)));
-        tag.putByteArray(TAG_COLORS, colors);
+        // 不再把颜色数组塞进物品 NBT（体积大且无法让原版他人看见）
     }
 
     public static boolean isMapArtStack(ItemStack stack) {

@@ -24,13 +24,14 @@ public final class Geometry {
     private static final double CURVE_STEP = 0.4D;
 
     /**
-     * 生成量上限。
+     * 生成量上限（跟全局可调上限走）。
      *
-     * 半径 64 的实心球有一百多万个体素，光是装进列表就够卡一下，而它本来就
-     * 远超可建造上限。超了直接返回空列表，让调用方报错 —— 截断一半的形状
-     * 比什么都不画更让人困惑。
+     * 半径 64 的实心球有一百多万个体素，光是装进列表就够卡一下。
+     * 超了直接返回空列表，让调用方报错 —— 截断一半的形状比什么都不画更让人困惑。
      */
-    public static final int MAX_VOXELS = BlockEdits.MAX_VOLUME;
+    public static int maxVoxels() {
+        return BlockEdits.maxVolume();
+    }
 
     private Geometry() {
     }
@@ -54,7 +55,7 @@ public final class Geometry {
                 for (int z = -rz; z <= rz; z++) {
                     if (norm(x, y, z, ax, ay, az) > 1.0D) continue;
                     if (canHollow && norm(x, y, z, bx, by, bz) <= 1.0D) continue;
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(new BlockPos(x, y, z));
                 }
             }
@@ -88,7 +89,7 @@ public final class Geometry {
                 for (int v = -radius; v <= radius; v++) {
                     if (norm2(u, v, outer, outer) > 1.0D) continue;
                     if (canHollow && norm2(u, v, inner, inner) <= 1.0D) continue;
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(fromAxis(axis, along, u, v));
                 }
             }
@@ -114,7 +115,7 @@ public final class Geometry {
                 for (int z = -radius; z <= radius; z++) {
                     if (norm2(x, z, outer, outer) > 1.0D) continue;
                     if (hollowLayer && norm2(x, z, inner, inner) <= 1.0D) continue;
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(new BlockPos(x, y, z));
                 }
             }
@@ -133,7 +134,7 @@ public final class Geometry {
             for (int x = -outer; x <= outer; x++) {
                 for (int z = -outer; z <= outer; z++) {
                     if (hollowLayer && Math.abs(x) <= inner && Math.abs(z) <= inner) continue;
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(new BlockPos(x, y, z));
                 }
             }
@@ -157,7 +158,7 @@ public final class Geometry {
                 double ring = Math.sqrt((double) u * u + (double) v * v) - major;
                 for (int along = -minor; along <= minor; along++) {
                     if (ring * ring + (double) along * along > tube * tube) continue;
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(fromAxis(axis, along, u, v));
                 }
             }
@@ -186,7 +187,7 @@ public final class Geometry {
                 if (norm2(x, y, a, b) > 1.0D) continue;
                 if (ia > 0.0D && ib > 0.0D && norm2(x, y, ia, ib) <= 1.0D) continue;
                 for (int z = 0; z < depth; z++) {
-                    if (out.size() >= MAX_VOXELS) return List.of();
+                    if (out.size() >= maxVoxels()) return List.of();
                     out.add(new BlockPos(x, y, z));
                 }
             }
@@ -242,7 +243,7 @@ public final class Geometry {
                         double dy = y + 0.5D - point.y;
                         double dz = z + 0.5D - point.z;
                         if (dx * dx + dy * dy + dz * dz <= rr) {
-                            if (out.size() >= MAX_VOXELS) return List.of();
+                            if (out.size() >= maxVoxels()) return List.of();
                             out.add(new BlockPos(x, y, z));
                         }
                     }

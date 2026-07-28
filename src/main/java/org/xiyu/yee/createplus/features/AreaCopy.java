@@ -75,7 +75,7 @@ public class AreaCopy extends CreativePlusFeature {
             notifyActionBar("§c请先用选区工具选择一个区域");
             return;
         }
-        if (selection.volume() > BlockEdits.MAX_VOLUME) {
+        if (selection.volume() > BlockEdits.maxVolume()) {
             notifyActionBar("§c选区太大了（" + selection.volume() + "）");
             return;
         }
@@ -163,7 +163,7 @@ public class AreaCopy extends CreativePlusFeature {
         }
 
         long volume = selection.volume() * count;
-        if (volume > BlockEdits.MAX_VOLUME) {
+        if (volume > BlockEdits.maxVolume()) {
             notifyActionBar("§c阵列总量太大了（" + volume + "）");
             return;
         }

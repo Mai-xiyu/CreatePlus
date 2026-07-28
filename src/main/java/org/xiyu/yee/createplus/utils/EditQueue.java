@@ -19,12 +19,23 @@ import java.util.Deque;
  * 大批量修改必须分摊到多个 tick 上：一次性发几千个数据包会被服务器踢掉，
  * 而在客户端主线程里同步跑完则会直接卡死游戏。
  *
- * 旧版本的做法是开一个 ScheduledExecutorService 从别的线程发命令，
- * 那是典型的"能跑但随时会炸"——网络线程和世界访问都不是线程安全的。
+ * 支持逐格 setblock，也支持分批 {@code /fill}（突破原版单次 32768）。
  */
 public final class EditQueue {
 
-    private record Task(BlockPos pos, BlockState state) {
+    private record Task(BlockPos from, BlockPos to, BlockState state, String fillMode) {
+        static Task block(BlockPos pos, BlockState state) {
+            return new Task(pos, null, state, null);
+        }
+
+        static Task fill(BlockPos from, BlockPos to, BlockState state, String fillMode) {
+            return new Task(from, to, state, fillMode);
+        }
+
+        boolean isRegionFill() {
+            return to != null;
+        }
+
         boolean isBreak() {
             return state == null || state.isAir();
         }
@@ -32,6 +43,8 @@ public final class EditQueue {
 
     private static final Deque<Task> TASKS = new ArrayDeque<>();
     private static int perTick = 64;
+    /** 每 tick 最多下发几条 fill（fill 服务端很重）。 */
+    private static final int FILLS_PER_TICK = 2;
     private static int total = 0;
     private static int done = 0;
     private static int skipped = 0;
@@ -61,12 +74,18 @@ public final class EditQueue {
     }
 
     public static void enqueue(BlockPos pos, BlockState state) {
-        TASKS.add(new Task(pos.immutable(), state));
+        TASKS.add(Task.block(pos.immutable(), state));
         total++;
     }
 
     public static void enqueueBreak(BlockPos pos) {
         enqueue(pos, Blocks.AIR.defaultBlockState());
+    }
+
+    /** 排队一条区域 fill（体积须已按 {@link BlockEdits#FILL_COMMAND_MAX} 切好）。 */
+    public static void enqueueFill(BlockPos from, BlockPos to, BlockState state, String fillMode) {
+        TASKS.add(Task.fill(from.immutable(), to.immutable(), state, fillMode));
+        total++;
     }
 
     public static void cancel() {
@@ -87,24 +106,42 @@ public final class EditQueue {
         }
 
         boolean commands = BlockEdits.canUseCommands();
-        int budget = perTick;
+        int blockBudget = perTick;
+        int fillBudget = FILLS_PER_TICK;
 
-        while (budget-- > 0 && !TASKS.isEmpty()) {
+        while (!TASKS.isEmpty()) {
+            Task peek = TASKS.peek();
+            if (peek == null) break;
+
+            if (peek.isRegionFill()) {
+                if (fillBudget-- <= 0) break;
+                Task task = TASKS.poll();
+                if (task == null) break;
+                if (commands) {
+                    BlockEdits.fillViaCommand(task.from(), task.to(), task.state(), task.fillMode());
+                    done++;
+                } else {
+                    skipped++;
+                }
+                continue;
+            }
+
+            if (blockBudget-- <= 0) break;
             Task task = TASKS.poll();
             if (task == null) break;
 
             if (commands) {
                 if (task.isBreak()) {
-                    BlockEdits.setBlockViaCommand(task.pos(), Blocks.AIR.defaultBlockState());
+                    BlockEdits.setBlockViaCommand(task.from(), Blocks.AIR.defaultBlockState());
                 } else {
-                    BlockEdits.setBlockViaCommand(task.pos(), task.state());
+                    BlockEdits.setBlockViaCommand(task.from(), task.state());
                 }
                 done++;
             } else if (task.isBreak()) {
-                BlockEdits.sendBreakPacket(task.pos());
+                BlockEdits.sendBreakPacket(task.from());
                 done++;
             } else if (matchesHeldItem(player, task.state())) {
-                if (BlockEdits.placeWithHeldItem(task.pos(), InteractionHand.MAIN_HAND)) {
+                if (BlockEdits.placeWithHeldItem(task.from(), InteractionHand.MAIN_HAND)) {
                     done++;
                 } else {
                     skipped++;
@@ -117,7 +154,6 @@ public final class EditQueue {
         if (TASKS.isEmpty()) {
             finish();
         } else {
-            // 物品栏上方的提示会互相覆盖，每 tick 刷一次就是一条进度条
             message(String.format("§7%s §f%d§7/§f%d", label, done + skipped, total));
         }
     }
@@ -129,7 +165,7 @@ public final class EditQueue {
 
     private static void finish() {
         StringBuilder text = new StringBuilder();
-        text.append("§a").append(label).append(" 完成 §f").append(done).append(" §7个方块");
+        text.append("§a").append(label).append(" 完成 §f").append(done).append(" §7步");
         if (skipped > 0) {
             text.append(" §c(跳过 ").append(skipped).append(")");
         }

@@ -11,8 +11,6 @@ import org.xiyu.yee.createplus.features.Performance;
 @Mixin(ClientLevel.class)
 public class ClientLevelMixin {
 
-    // 两个重载都要拦，写全描述符而不是 "addParticle*"：
-    // 通配符要是没匹配上，Mixin 会在启动时直接抛错
     @Inject(
         method = {
             "addParticle(Lnet/minecraft/core/particles/ParticleOptions;DDDDDD)V",

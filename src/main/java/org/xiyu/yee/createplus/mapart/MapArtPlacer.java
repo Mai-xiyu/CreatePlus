@@ -4,7 +4,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -27,10 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 地图画自动放置：墙 → 展示框 → 挂上地图。
- * <p>
- * 有 OP 时走 setblock / summon（稳）；否则创造模式用数据包模拟放置。
- * 右键点墙面锚定左下角，网格沿视角「右 / 上」展开，图片第 0 张在左上。
+ * 地图画自动放置：墙 → 展示框 → 挂地图。
+ * 单人/房主写入世界地图数据后他人可见；非房主联机仅自己客户端能看见画。
  */
 public final class MapArtPlacer {
     private static boolean listening;
@@ -84,12 +81,10 @@ public final class MapArtPlacer {
 
     public static void arm(List<ItemStack> maps, int cols, int rows, BlockState wall) {
         if (maps == null || maps.isEmpty() || cols < 1 || rows < 1) return;
-        pending = null;
-        job = null;
         pending = new Pending(maps, cols, rows, wall);
+        job = null;
         ensureListening();
-        tip("§a[地图画] §f右键点墙面锚定位置（" + cols + "×" + rows
-            + "）· 再开界面点自动放置可覆盖");
+        tip("§a[地图画] §f右键点墙面锚定（" + cols + "×" + rows + "）");
     }
 
     public static void cancel() {
@@ -148,14 +143,10 @@ public final class MapArtPlacer {
             }
             Cell cell = j.cells.get(j.index++);
             if (j.commands) {
-                Integer mapId = net.minecraft.world.item.MapItem.getMapId(cell.map);
                 int facing = j.face.get3DDataValue();
-                int id = mapId == null ? 0 : mapId;
-                // 不塞颜色数组（命令太长）；客户端靠 MapArtStore / 物品 flag 重注
                 BlockEdits.sendCommand(String.format(
-                    "summon item_frame %d %d %d {Facing:%d,Fixed:1b,Invulnerable:1b,Item:{id:\"minecraft:filled_map\",Count:1b,tag:{map:%d,createplus_mapart:1b}}}",
-                    cell.framePos.getX(), cell.framePos.getY(), cell.framePos.getZ(),
-                    facing, id));
+                    "summon item_frame %d %d %d {Facing:%d,Fixed:1b,Invulnerable:1b}",
+                    cell.framePos.getX(), cell.framePos.getY(), cell.framePos.getZ(), facing));
             } else {
                 giveCreative(mc, new ItemStack(Items.ITEM_FRAME));
                 clickFace(mc, cell.wallPos, j.face);
@@ -165,46 +156,49 @@ public final class MapArtPlacer {
         }
 
         if (j.phase == Phase.MAPS) {
-            if (j.commands) {
-                // OP 路径已在 summon 时带上地图
-                j.phase = Phase.DONE;
-                finish(j.cells.size());
-                return;
-            }
             if (j.index >= j.cells.size()) {
                 j.phase = Phase.DONE;
                 finish(j.cells.size());
                 return;
             }
             Cell cell = j.cells.get(j.index++);
+            if (cell.map.isEmpty()) return;
             ItemFrame frame = findFrame(mc, cell.wallPos, cell.framePos, j.face);
             if (frame == null) {
-                // 再试一次：有时实体晚一拍生成
                 j.index--;
                 j.waitTicks = 5;
                 return;
             }
+            if (!frame.getItem().isEmpty()) {
+                if (mc.gameMode != null && mc.player != null) {
+                    mc.gameMode.attack(mc.player, frame);
+                }
+                j.index--;
+                j.waitTicks = 4;
+                return;
+            }
             giveCreative(mc, cell.map.copy());
             interactEntity(mc, frame);
-            j.waitTicks = 2;
+            j.waitTicks = j.commands ? 1 : 2;
         }
     }
 
     private static void finish(int n) {
         job = null;
-        tip("§a[地图画] §f自动放置完成（" + n + " 格）");
+        boolean host = Minecraft.getInstance().getSingleplayerServer() != null;
+        tip("§a[地图画] §f自动放置完成（" + n + " 格）"
+            + (host ? "· 已写入世界，他人可见" : "· 非房主仅自己可见；全局请用方块像素画"));
     }
 
     private static void startFromHit(BlockHitResult hit) {
         if (pending == null) return;
         if (!CreativeGate.allow() && !BlockEdits.canUseCommands()) {
-            tip("§c[地图画] 需要创造模式（或 OP）才能自动放置");
+            tip("§c[地图画] 需要创造模式（或 OP）");
             return;
         }
-
         Direction face = hit.getDirection();
         if (face.getAxis() == Direction.Axis.Y) {
-            tip("§c[地图画] 请点侧面墙（暂不支持地板/天花板）");
+            tip("§c[地图画] 请点侧面墙");
             return;
         }
 
@@ -214,13 +208,11 @@ public final class MapArtPlacer {
         int i = 0;
         for (int row = 0; row < pending.rows(); row++) {
             for (int col = 0; col < pending.cols(); col++) {
-                // 图片行 0 在顶部
                 int up = pending.rows() - 1 - row;
                 BlockPos wallPos = origin.relative(right, col).relative(Direction.UP, up);
                 BlockPos framePos = wallPos.relative(face);
                 ItemStack map = i < pending.maps().size()
-                    ? pending.maps().get(i).copy()
-                    : ItemStack.EMPTY;
+                    ? pending.maps().get(i).copy() : ItemStack.EMPTY;
                 cells.add(new Cell(wallPos, framePos, map));
                 i++;
             }
@@ -229,11 +221,9 @@ public final class MapArtPlacer {
         boolean commands = BlockEdits.canUseCommands();
         job = new Job(cells, face, pending.wall(), commands);
         pending = null;
-        tip("§a[地图画] §f开始放置 " + cells.size() + " 格（"
-            + (commands ? "命令模式" : "创造数据包") + "）…");
+        tip("§a[地图画] §f开始放置 " + cells.size() + " 格…");
     }
 
-    /** 面向 face 的墙时，观众视角的「右」方向。 */
     static Direction rightOf(Direction face) {
         return switch (face) {
             case NORTH -> Direction.WEST;
@@ -255,8 +245,8 @@ public final class MapArtPlacer {
         if (mc.player == null || mc.gameMode == null) return;
         Vec3 hit = Vec3.atCenterOf(wallPos).add(
             face.getStepX() * 0.51, face.getStepY() * 0.51, face.getStepZ() * 0.51);
-        BlockHitResult bhr = new BlockHitResult(hit, face, wallPos, false);
-        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, bhr);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND,
+            new BlockHitResult(hit, face, wallPos, false));
     }
 
     private static void interactEntity(Minecraft mc, Entity entity) {
@@ -288,14 +278,11 @@ public final class MapArtPlacer {
         if (!event.isUseItem()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.player == null) return;
-
-        if (pending != null) {
-            if (mc.hitResult instanceof BlockHitResult blockHit
-                && blockHit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
-                event.setCanceled(true);
-                event.setSwingHand(false);
-                startFromHit(blockHit);
-            }
+        if (pending != null && mc.hitResult instanceof BlockHitResult blockHit
+            && blockHit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+            startFromHit(blockHit);
         }
     }
 

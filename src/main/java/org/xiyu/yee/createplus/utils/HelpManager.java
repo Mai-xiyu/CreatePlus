@@ -28,6 +28,9 @@ public final class HelpManager {
             "主手拿上要填充的方块",
             "按填充键，或输入 /createplus fill [模式]",
             "模式: fill / hollow / walls / frame / replace_air / clear",
+            "有 OP 时优先用 /fill；超过 32768 自动多批执行",
+            "体积上限可在设置里调，或 /createplus maxvolume <数量>（最大一亿）",
+            "过大时不记撤销快照",
             "/createplus undo 撤销（需要 OP 权限）")),
         Map.entry("area_copy", List.of(
             "/createplus copy 复制当前选区",
@@ -91,7 +94,8 @@ public final class HelpManager {
             "支持羊毛、地毯、混凝土、陶瓦、玻璃、蜡烛、木材等")),
         Map.entry("building_export", List.of(
             "选好区域后 /createplus export <名称>",
-            "/createplus import <名称> 载入并预览",
+            "/createplus import <名称> 载入并预览（锁定当时脚下为原点）",
+            "预览时可走动查看，确认后按锁定原点建造，不会因移动偏移",
             "/createplus confirm 确认导入，/createplus cancel 取消",
             "文件位于 .minecraft/createplus/buildings/",
             "导入依赖 setblock 命令，需要 OP 2 级权限")),

@@ -18,11 +18,8 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * 导入 .mcfunction 建筑：先预览包围盒，确认后按 tick 分批下发命令。
- *
- * 旧实现用后台线程 {@code ScheduledExecutorService} 每 50ms 发一条命令，
- * 既碰了非线程安全的网络与世界对象，又完全绕过了游戏的暂停/退出，
- * 退出存档后还会继续往一个已失效的连接里写东西。
+ * 导入 .mcfunction 建筑：以执行 import 时的玩家坐标为固定原点预览，
+ * 确认后把相对坐标写成绝对坐标再分批下发，避免玩家走动导致偏移。
  */
 public final class BuildingImport {
     private static final int COMMANDS_PER_TICK = 8;
@@ -42,7 +39,7 @@ public final class BuildingImport {
     }
 
     public static boolean hasPreview() {
-        return previewBox != null && running.isEmpty();
+        return previewBox != null && running.isEmpty() && !pending.isEmpty();
     }
 
     public static boolean isRunning() {
@@ -53,12 +50,16 @@ public final class BuildingImport {
         return name;
     }
 
+    public static BlockPos getOrigin() {
+        return origin;
+    }
+
     public static int size() {
         return pending.size();
     }
 
     /**
-     * 载入文件并生成预览。
+     * 载入文件并生成预览。原点锁定为当前玩家脚下坐标。
      *
      * @return 读到的方块数量，失败时返回 -1
      */
@@ -94,7 +95,9 @@ public final class BuildingImport {
                 int y = parseCoord(parts[2]);
                 int z = parseCoord(parts[3]);
                 if (pending.isEmpty()) {
-                    relative = parts[1].startsWith("~");
+                    relative = parts[1].startsWith("~")
+                        || parts[2].startsWith("~")
+                        || parts[3].startsWith("~");
                 }
                 minX = Math.min(minX, x);
                 minY = Math.min(minY, y);
@@ -129,12 +132,34 @@ public final class BuildingImport {
         return value.isEmpty() ? 0 : Integer.parseInt(value);
     }
 
+    /**
+     * 确认建造：把相对 setblock 钉死到预览原点上的绝对坐标，
+     * 之后玩家怎么走都不影响落点。
+     */
     public static void confirm() {
-        if (pending.isEmpty()) return;
-        running.addAll(pending);
+        if (pending.isEmpty() || origin == null) return;
+
+        running.clear();
+        if (relative) {
+            for (String line : pending) {
+                running.add(toAbsolute(line, origin));
+            }
+        } else {
+            running.addAll(pending);
+        }
         total = running.size();
         sent = 0;
         pending.clear();
+    }
+
+    /** setblock ~x ~y ~z block… → setblock absX absY absZ block… */
+    private static String toAbsolute(String line, BlockPos base) {
+        String[] parts = line.split(" ", 5);
+        if (parts.length < 5) return line;
+        int x = base.getX() + parseCoord(parts[1]);
+        int y = base.getY() + parseCoord(parts[2]);
+        int z = base.getZ() + parseCoord(parts[3]);
+        return "setblock " + x + " " + y + " " + z + " " + parts[4];
     }
 
     public static void cancel() {
@@ -159,7 +184,6 @@ public final class BuildingImport {
         for (int i = 0; i < COMMANDS_PER_TICK && !running.isEmpty(); i++) {
             String command = running.poll();
             if (command == null) break;
-            // 命令里的 ~ 会以玩家当前位置为基准，所以导入过程中不要乱跑
             player.connection.sendCommand(command);
             sent++;
         }
@@ -168,6 +192,7 @@ public final class BuildingImport {
             player.displayClientMessage(Component.literal(
                 "§a建筑 §f" + name + " §a导入完成（" + sent + " 个方块）"), true);
             previewBox = null;
+            origin = null;
         } else {
             player.displayClientMessage(Component.literal(
                 String.format("§7导入中 §f%d§7/§f%d", sent, total)), true);
@@ -183,8 +208,10 @@ public final class BuildingImport {
         double sizeX = previewBox.maxX - previewBox.minX;
         double sizeY = previewBox.maxY - previewBox.minY;
         double sizeZ = previewBox.maxZ - previewBox.minZ;
+        String originText = origin == null ? ""
+            : String.format("  原点 %d %d %d", origin.getX(), origin.getY(), origin.getZ());
         RenderUtils.drawWorldLabel(poseStack, camera,
-            String.format("%s  %.0fx%.0fx%.0f", name, sizeX, sizeY, sizeZ),
+            String.format("%s  %.0fx%.0fx%.0f%s", name, sizeX, sizeY, sizeZ, originText),
             previewBox.getCenter().x, previewBox.maxY + 0.5D, previewBox.getCenter().z,
             0xFFFFFFFF);
     }

@@ -84,7 +84,7 @@ public class FloodFill extends CreativePlusFeature {
         EditHistory.Step step = EditHistory.begin("洪水填充");
         EditQueue.start("洪水填充");
         int count = 0;
-        int limit = Math.min(maxBlocks.value(), BlockEdits.MAX_VOLUME);
+        int limit = Math.min(maxBlocks.value(), BlockEdits.maxVolume());
 
         while (!queue.isEmpty() && count < limit) {
             BlockPos pos = queue.poll();

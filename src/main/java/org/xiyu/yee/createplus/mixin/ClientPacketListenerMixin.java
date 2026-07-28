@@ -3,7 +3,6 @@ package org.xiyu.yee.createplus.mixin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
@@ -12,12 +11,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.xiyu.yee.createplus.api.NoClipAPI;
-import org.xiyu.yee.createplus.mapart.MapArtStore;
 import org.xiyu.yee.createplus.utils.CreativeGate;
 
 /**
  * 穿墙开启时丢掉服务端拉回，但仍回复传送确认，避免连接状态机卡死。
- * 同时保护 CreatePlus 高位地图画 ID，不被服务端 map 包覆盖。
+ * <p>
+ * 地图画防护不放这里：联机对 {@code handleMapItemData} 的 HEAD cancel 注入
+ * 会触发 VerifyError（CallbackInfo / this 错位）。改由 {@link ClientLevelMixin} 拦 overrideMapData。
  */
 @Mixin(ClientPacketListener.class)
 public class ClientPacketListenerMixin {
@@ -36,12 +36,5 @@ public class ClientPacketListenerMixin {
                 player.getYRot(), player.getXRot(), false));
         }
         ci.cancel();
-    }
-
-    @Inject(method = "handleMapItemData", at = @At("HEAD"), cancellable = true)
-    private void createplus$protectMapArt(ClientboundMapItemDataPacket packet, CallbackInfo ci) {
-        if (MapArtStore.isOurId(packet.getMapId())) {
-            ci.cancel();
-        }
     }
 }

@@ -13,6 +13,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
@@ -233,6 +234,25 @@ public final class CreatePlusCommand {
                         }
                         return withFeature(context.getSource(), AreaFill.class,
                             feature -> feature.fill(mode));
+                    })))
+
+            .then(Commands.literal("maxvolume")
+                .executes(context -> {
+                    context.getSource().sendSuccess(() -> literal(
+                        "§7当前方块操作上限: §f" + BlockEdits.maxVolume()
+                            + " §7（可改范围 " + BlockEdits.FILL_COMMAND_MAX
+                            + " ~ " + BlockEdits.ABSOLUTE_MAX_VOLUME + "）"), false);
+                    return 1;
+                })
+                .then(Commands.argument("value", IntegerArgumentType.integer(
+                        BlockEdits.FILL_COMMAND_MAX, BlockEdits.ABSOLUTE_MAX_VOLUME))
+                    .executes(context -> {
+                        int value = IntegerArgumentType.getInteger(context, "value");
+                        return withFeature(context.getSource(), AreaFill.class, feature -> {
+                            feature.setMaxVolumeLimit(value);
+                            context.getSource().sendSuccess(() -> literal(
+                                "§a方块操作上限已设为 §f" + BlockEdits.maxVolume()), false);
+                        });
                     })))
 
             // === 生成式建造 ===
@@ -566,7 +586,13 @@ public final class CreatePlusCommand {
                 return 0;
             }
 
-            source.sendSuccess(() -> literal("§a已载入 §f" + count + " §a个方块，绿框为预览位置"), false);
+            source.sendSuccess(() -> literal("§a已载入 §f" + count + " §a个方块，绿框为预览（原点已锁定）"), false);
+            if (BuildingImport.getOrigin() != null) {
+                BlockPos o = BuildingImport.getOrigin();
+                source.sendSuccess(() -> literal(
+                    "§7原点 §f" + o.getX() + " " + o.getY() + " " + o.getZ()
+                        + " §7（走动不影响，确认后按此建造）"), false);
+            }
             source.sendSuccess(() -> literal("§7确认导入: §f/createplus confirm§7   取消: §f/createplus cancel"), false);
             return 1;
         } catch (IOException e) {

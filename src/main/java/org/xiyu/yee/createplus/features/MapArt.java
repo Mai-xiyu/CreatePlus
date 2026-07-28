@@ -4,11 +4,11 @@ import net.minecraft.client.Minecraft;
 import org.xiyu.yee.createplus.ui.mapart.MapArtScreen;
 
 /**
- * 图片 → 地图画 → 写入创造模式「已保存的快捷栏」。
+ * 地图画（filled_map）+ 方块像素画（全局可见备用）共用入口。
  */
 public class MapArt extends CreativePlusFeature {
     public MapArt() {
-        super("map_art", "选择图片生成地图画，写入已保存的快捷栏（单人/多人客户端均可）", Category.BUILDING);
+        super("map_art", "地图画 / 方块像素画：选图生成，可写入快捷栏或放置到世界", Category.BUILDING);
     }
 
     @Override
@@ -17,7 +17,6 @@ public class MapArt extends CreativePlusFeature {
         if (mc != null) {
             mc.execute(() -> {
                 mc.setScreen(new MapArtScreen());
-                // 界面用完即关功能，避免一直保持开启
                 setEnabled(false);
             });
         }
@@ -26,8 +25,9 @@ public class MapArt extends CreativePlusFeature {
     @Override
     public String getDetailedDescription() {
         return getTranslatedDescription()
-            + "\n§7每张 128×128 像素；几乘几=墙面张数；等级 0~4=原版覆盖边长 128×2^n"
-            + "\n§7可生成单张、清空已保存快捷栏地图画、自动放置墙+展示框+地图"
-            + "\n§7多人客户端：像素本机可见；自动放置需创造/OP";
+            + "\n§7地图画：高清 filled_map，单人/房主他人可见；非房主联机仅自己可见"
+            + "\n§7方块像素画：混凝土等拼图，原版全局可见（备用）"
+            + "\n§7方块画可竖放或平铺地板/天花板；尺寸按面积上限放大，尽量 1:1"
+            + "\n§7界面顶部可切换两种模式";
     }
 }
